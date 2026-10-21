@@ -483,14 +483,14 @@ function syncSettingsFields() {
 
 function updateSettingsStatusFromState() {
   if (state.directSiliconKey) {
-    const polish = state.directDeepseekKey
+    const translation = state.directDeepseekKey
       ? state.polishEnabled
-        ? " · DeepSeek 润色可用"
-        : " · DeepSeek 润色已关闭"
-      : " · 未配置 DeepSeek 润色";
+        ? " · DeepSeek 直译已启用"
+        : " · DeepSeek 直译已关闭（使用基础翻译）"
+      : " · 未配置 DeepSeek，使用基础翻译";
     setSettingsStatus(
       "ok",
-      `浏览器直连已配置 · SiliconFlow ASR（${SILICONFLOW_MODEL}）${polish}`,
+      `浏览器直连已配置 · SiliconFlow ASR（${SILICONFLOW_MODEL}）${translation}`,
     );
     return;
   }
@@ -2209,11 +2209,42 @@ async function runEntryTranslation(entry) {
   refreshEntryTranslationUI(entry);
 
   try {
-    const translated = await state.translationService.translate(requestText, entry.sourceLang);
+    let translated = "";
+    let provider = "base";
+
+    if (state.directDeepseekKey && state.polishEnabled) {
+      try {
+        translated = await translateWithDeepSeekDirect(
+          entry.sourceLang,
+          entry.targetLang,
+          requestText,
+        );
+        provider = "deepseek";
+      } catch (error) {
+        const now = performance.now();
+        if (!state.lastPolishNoticeAt || now - state.lastPolishNoticeAt > 15000) {
+          state.lastPolishNoticeAt = now;
+          const raw = String(error?.message || "");
+          showToast(
+            /401|unauthorized|invalid|api key|余额|balance/i.test(raw)
+              ? "DeepSeek 直译失败（Key 或余额问题），已回退基础翻译。"
+              : "DeepSeek 直译失败，已回退基础翻译。",
+            { error: true, duration: 5200 },
+          );
+        }
+      }
+    }
+
+    if (!translated) {
+      translated = await state.translationService.translate(requestText, entry.sourceLang);
+      provider = "base";
+    }
+
     if (!isEntryCurrent(entry)) return;
 
     if (entry.text === requestText) {
       entry.translation = translated;
+      entry.translationProvider = provider;
       entry.translationError = "";
       entry.translationStatus = "done";
     } else {
@@ -2245,8 +2276,9 @@ async function runEntryTranslation(entry) {
 
 function canPolishEntry(entry) {
   const hasProvider = Boolean(
-    state.directDeepseekKey ||
-      (state.proxyBaseUrl && state.proxyHealth?.polish),
+    !state.directDeepseekKey &&
+      state.proxyBaseUrl &&
+      state.proxyHealth?.polish,
   );
   return Boolean(
     hasProvider &&
@@ -2264,7 +2296,7 @@ function cleanPolishResult(value) {
   return text.slice(0, 2000);
 }
 
-async function polishWithDeepSeekDirect(sourceLang, targetLang, source, draft) {
+async function translateWithDeepSeekDirect(sourceLang, targetLang, source) {
   if (!state.directDeepseekKey) {
     throw new Error("未配置 DeepSeek API Key");
   }
@@ -2272,16 +2304,15 @@ async function polishWithDeepSeekDirect(sourceLang, targetLang, source, draft) {
   const sourceName = sourceLang === "zh-CN" ? "Simplified Chinese" : "English";
   const targetName = targetLang === "zh-CN" ? "Simplified Chinese" : "English";
   const system = [
-    "You are a professional live subtitle editor and native bilingual translator.",
-    `Polish the draft translation so it sounds natural, idiomatic, and fluent in ${targetName}.`,
+    "You are a professional live subtitle translator and native bilingual editor.",
+    `Translate the source text from ${sourceName} into natural, idiomatic, and fluent ${targetName}.`,
     "Preserve the exact meaning, tone, names, numbers, and facts from the source.",
     "Do not add new information or commentary. Keep it concise enough for a live subtitle.",
     "Return only the final translation. Do not wrap it in quotes or code fences.",
   ].join(" ");
   const user = [
     `Source (${sourceName}): ${source}`,
-    `Draft (${targetName}): ${draft}`,
-    "Final polished translation:",
+    `Final ${targetName} translation:`,
   ].join("\n");
 
   const response = await fetch(DEEPSEEK_ENDPOINT, {
@@ -2307,10 +2338,10 @@ async function polishWithDeepSeekDirect(sourceLang, targetLang, source, draft) {
     throw new Error(
       data?.error?.message ||
         data?.message ||
-        `DeepSeek 润色失败 (${response.status})`,
+        `DeepSeek 翻译失败 (${response.status})`,
     );
   }
-  return data?.choices?.[0]?.message?.content || "";
+  return cleanPolishResult(data?.choices?.[0]?.message?.content);
 }
 
 function scheduleEntryPolish(entry) {
@@ -2355,38 +2386,26 @@ async function runEntryPolish(entry) {
   refreshEntryTranslationUI(entry);
 
   try {
-    let polished = "";
-
-    if (state.directDeepseekKey) {
-      polished = await polishWithDeepSeekDirect(
+    const response = await fetch(`${state.proxyBaseUrl}/polish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         sourceLang,
         targetLang,
-        requestSource,
-        requestDraft,
-      );
-    } else {
-      const response = await fetch(`${state.proxyBaseUrl}/polish`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sourceLang,
-          targetLang,
-          source: requestSource,
-          draft: requestDraft,
-        }),
-        signal: AbortSignal.timeout(20000),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(data?.error || "DeepSeek polish failed");
-      }
-      polished = data?.text || "";
+        source: requestSource,
+        draft: requestDraft,
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(data?.error || "DeepSeek polish failed");
     }
 
     if (!isEntryCurrent(entry)) return;
 
     if (entry.text === requestSource && entry.translation === requestDraft) {
-      const cleaned = cleanPolishResult(polished);
+      const cleaned = cleanPolishResult(data?.text);
       if (cleaned && cleaned !== requestDraft) {
         entry.translation = cleaned;
       }

@@ -125,7 +125,7 @@
             <li><i class="chip-dot chip-dot-a"></i>自动识别中 / 英</li>
             <li><i class="chip-dot chip-dot-b"></i>实时互译</li>
             <li><i class="chip-dot chip-dot-c"></i>发言人识别</li>
-            <li><i class="chip-dot chip-dot-d"></i>DeepSeek 润色</li>
+            <li><i class="chip-dot chip-dot-d"></i>DeepSeek 直译</li>
           </ul>
         </section>
 
@@ -229,7 +229,7 @@
         </div>
         <div class="panel-foot">
           <span><i class="foot-dot"></i> 字幕仅保存在本页</span>
-          <span class="panel-credit">翻译 <a href="https://www.deepl.com/" target="_blank" rel="noopener">DeepL</a><span id="polish-credit" hidden> · 润色 DeepSeek</span></span>
+          <span class="panel-credit">翻译 <a href="https://www.deepl.com/" target="_blank" rel="noopener">DeepL</a><span id="polish-credit" hidden> · DeepSeek 优化</span></span>
           <span id="panel-count">0 条</span>
         </div>
       </aside>
@@ -275,13 +275,13 @@
             </label>
             <label class="toggle-row">
               <input id="polish-toggle" type="checkbox" checked />
-              <span>使用 DeepSeek 润色译文（会多一次请求，稍慢）</span>
+              <span>使用 DeepSeek 直译（单次请求，跳过基础翻译）</span>
             </label>
             <div class="settings-actions">
               <button type="button" class="settings-btn primary" id="direct-save">保存并启用</button>
               <button type="button" class="settings-btn quiet" id="direct-clear">清除密钥</button>
             </div>
-            <p class="settings-note">想在最短时间内看到字幕，可以关闭下方 DeepSeek 润色；基础译文会更快出现。</p>
+            <p class="settings-note">开启 DeepSeek 直译时只发一次翻译请求；关闭后使用 DeepL/MyMemory 基础翻译。若直译失败会自动回退基础翻译。</p>
             <p class="settings-warning">Key 仅存储在这台设备的浏览器中；共享页面时，其他访客需要填写自己的 Key。不要在公用电脑保存。</p>
           </section>
 

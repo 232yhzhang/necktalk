@@ -52,16 +52,18 @@ handling policies.
 
 ## DeepSeek
 
-DeepSeek is used for optional translation polishing.
+DeepSeek is used for optional direct translation when a direct API key is
+configured, and for translation polishing in the optional Worker proxy mode.
 
 - Service: <https://www.deepseek.com/>
 - API documentation: <https://api-docs.deepseek.com/>
 
 In direct browser mode, the user supplies a DeepSeek API key, which is stored in
-the browser's localStorage. Recognized text and the draft translation are sent
-directly from the browser to DeepSeek. In the optional Worker proxy mode, the
-key is stored as a Worker secret and requests are sent through the Worker.
-Usage is subject to DeepSeek's terms, privacy policy, and account limits.
+the browser's localStorage. Recognized text is sent directly from the browser to
+DeepSeek, which returns a natural translation in one request. In the optional
+Worker proxy mode, the key is stored as a Worker secret and requests are sent
+through the Worker. Usage is subject to DeepSeek's terms, privacy policy, and
+account limits.
 
 ## Cloudflare Workers
 
