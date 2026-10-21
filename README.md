@@ -57,6 +57,10 @@ python -m http.server 4173
 
 也可以使用任意静态服务器，例如 `npx serve .`。
 
+## 部署
+
+站点通过 GitHub Pages 从 `main` 分支根目录发布，不需要构建命令；推送新的 `main` 提交后会自动重新部署。
+
 ## 目录
 
 ```text
