@@ -122,6 +122,7 @@ const state = {
   bubbleZ: 10,
   lastFinalText: "",
   lastFinalAt: 0,
+  lastFinalSpeakerKey: null,
   speech: null,
   speechIssue: null,
   lastSpeechToastAt: 0,
@@ -308,6 +309,8 @@ function setLanguage(lang, announce = true) {
 
   if (state.live) {
     state.draft = { speakerKey: null, text: "" };
+    state.lastFinalText = "";
+    state.lastFinalSpeakerKey = null;
     for (const speaker of state.speakerByKey.values()) {
       speaker.entry = null;
       speaker.entryUpdatedAt = 0;
@@ -503,6 +506,7 @@ function resetSession() {
   state.faceCount = 0;
   state.lastFinalText = "";
   state.lastFinalAt = 0;
+  state.lastFinalSpeakerKey = null;
   state.faces.clear();
   state.bubbleZ = 10;
   state.autoScroll = true;
@@ -770,13 +774,19 @@ function handleInterimText(text, now) {
 function handleFinalText(text, now) {
   if (!text) return;
 
-  if (text === state.lastFinalText && now - state.lastFinalAt < 1600) {
+  const speaker = chooseSpeakerForText(now, true);
+
+  if (
+    text === state.lastFinalText &&
+    speaker.key === state.lastFinalSpeakerKey &&
+    now - state.lastFinalAt < 800
+  ) {
     return;
   }
   state.lastFinalText = text;
   state.lastFinalAt = now;
+  state.lastFinalSpeakerKey = speaker.key;
 
-  const speaker = chooseSpeakerForText(now, true);
   const previousKey = state.draft.speakerKey;
   state.draft = { speakerKey: speaker.key, text: "" };
   state.lastTextAt = now;
@@ -1316,6 +1326,7 @@ function clearTranscript() {
   state.entrySeq = 0;
   state.draft = { speakerKey: null, text: "" };
   state.lastFinalText = "";
+  state.lastFinalSpeakerKey = null;
 
   for (const speaker of state.speakerByKey.values()) {
     speaker.entry = null;
