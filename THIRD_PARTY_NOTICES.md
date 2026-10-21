@@ -29,19 +29,19 @@ limitations under the License.
 
 ## SiliconFlow SenseVoice and Other ASR Providers
 
-Automatic transcription and language detection are performed through the
-project's optional self-hosted Cloudflare Worker proxy. The default ASR provider
-is SiliconFlow's `FunAudioLLM/SenseVoiceSmall` model.
+The default automatic speech recognition provider is SiliconFlow's
+`FunAudioLLM/SenseVoiceSmall` model.
 
 - SiliconFlow: <https://siliconflow.cn/>
 - SenseVoice model: <https://siliconflow.cn/models>
-- Short audio clips are uploaded by the Worker to the configured ASR API for
-  transcription. Usage is subject to that provider's terms, privacy policy, and
-  quota limits. ASR API keys are configured as Worker secrets and are not
-  shipped in the website.
 
-The Worker also supports other OpenAI-compatible ASR endpoints. Optional
-examples include:
+In direct browser mode, the user supplies a SiliconFlow API key, which is stored
+in the browser's localStorage and used to send short audio clips directly from
+the browser to SiliconFlow. In the optional Worker proxy mode, the key is stored
+as a Cloudflare Worker secret instead. Usage is subject to SiliconFlow's terms,
+privacy policy, and quota limits.
+
+The optional Worker also supports other OpenAI-compatible ASR endpoints:
 
 - DeepInfra: <https://deepinfra.com/> (`openai/whisper-large-v3-turbo`)
 - Groq: <https://groq.com/> (`whisper-large-v3-turbo`)
@@ -52,14 +52,16 @@ handling policies.
 
 ## DeepSeek
 
-DeepSeek is used for optional translation polishing through the same Worker
-proxy.
+DeepSeek is used for optional translation polishing.
 
-- Service: DeepSeek — <https://www.deepseek.com/>
+- Service: <https://www.deepseek.com/>
 - API documentation: <https://api-docs.deepseek.com/>
-- Recognized text and the draft translation are sent to DeepSeek. Usage is
-  subject to DeepSeek's terms, privacy policy, and account limits. DeepSeek API
-  keys are configured as Worker secrets and are not shipped in the website.
+
+In direct browser mode, the user supplies a DeepSeek API key, which is stored in
+the browser's localStorage. Recognized text and the draft translation are sent
+directly from the browser to DeepSeek. In the optional Worker proxy mode, the
+key is stored as a Worker secret and requests are sent through the Worker.
+Usage is subject to DeepSeek's terms, privacy policy, and account limits.
 
 ## Cloudflare Workers
 
@@ -87,18 +89,18 @@ and is not operated by this project.
 If the DeepL/Mozhi route is unavailable, this project falls back to the free
 MyMemory translation API.
 
-- Service: MyMemory — <https://mymemory.translated.net/>
+- Service: MyMemory - <https://mymemory.translated.net/>
 - API documentation: <https://mymemory.translated.net/doc/spec.php>
 - Usage is subject to MyMemory's terms and quota limits. Recognized text is sent
   to the service to be translated.
 
 ## Web Speech API
 
-Speech recognition is delegated to the browser's built-in Web Speech API.
-No speech service is bundled with this project.
+Speech recognition fallback is delegated to the browser's built-in Web Speech
+API. No speech service is bundled with this project.
 
 ## Chromium Translator API
 
 If the browser exposes an available built-in `Translator` language pack, the
-project uses it for local translation. The language pack is provided by the
+project uses it for local base translation. The language pack is provided by the
 browser and is not bundled with this project.

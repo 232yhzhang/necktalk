@@ -84,7 +84,7 @@ export class CloudSpeechRecognizer {
   constructor({
     audioContext,
     sourceNode,
-    proxyBaseUrl,
+    transcribeAudio,
     onResult,
     onStatus,
     onError,
@@ -92,7 +92,7 @@ export class CloudSpeechRecognizer {
   }) {
     this.audioContext = audioContext;
     this.sourceNode = sourceNode;
-    this.proxyBaseUrl = String(proxyBaseUrl || "").replace(/\/+$/, "");
+    this.transcribeAudio = transcribeAudio;
     this.onResult = onResult;
     this.onStatus = onStatus;
     this.onError = onError;
@@ -288,23 +288,13 @@ export class CloudSpeechRecognizer {
   }
 
   async transcribe(item) {
-    const form = new FormData();
-    form.append("file", new Blob([item.wav], { type: "audio/wav" }), "speech.wav");
+    const blob = new Blob([item.wav], { type: "audio/wav" });
     const controller = new AbortController();
     this.currentController = controller;
     const timer = window.setTimeout(() => controller.abort(), 20000);
 
     try {
-      const response = await fetch(`${this.proxyBaseUrl}/transcribe`, {
-        method: "POST",
-        body: form,
-        signal: controller.signal,
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) {
-        const message = data?.error || `识别服务错误 (${response.status})`;
-        throw new Error(message);
-      }
+      const data = await this.transcribeAudio(blob, controller.signal);
       const text = String(data?.text || "").trim();
       if (!text) throw new Error("没有识别到语音");
       return {

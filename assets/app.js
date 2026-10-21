@@ -20,7 +20,13 @@ const MERGE_WINDOW = 5000;
 const MAX_ENTRY_LENGTH = 470;
 const PROXY_URL_KEY = "necktalk-proxy-url";
 const POLISH_KEY = "necktalk-polish";
+const SILICONFLOW_KEY = "necktalk-siliconflow-key";
+const DEEPSEEK_KEY = "necktalk-deepseek-key";
 const PROXY_TIMEOUT = 6000;
+const SILICONFLOW_ENDPOINT = "https://api.siliconflow.cn/v1/audio/transcriptions";
+const SILICONFLOW_MODEL = "FunAudioLLM/SenseVoiceSmall";
+const DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
+const DEEPSEEK_MODEL = "deepseek-chat";
 const SITE_CONFIG = window.NECKTALK_CONFIG || {};
 
 const SPEECH_MESSAGES = {
@@ -84,6 +90,10 @@ const settingsScrim = $("#settings-scrim");
 const settingsClose = $("#settings-close");
 const settingsStatus = $("#settings-status");
 const settingsStatusText = $("#settings-status-text");
+const sfKeyInput = $("#sf-key-input");
+const dsKeyInput = $("#ds-key-input");
+const directSaveBtn = $("#direct-save");
+const directClearBtn = $("#direct-clear");
 const proxyUrlInput = $("#proxy-url-input");
 const polishToggle = $("#polish-toggle");
 const proxyTestBtn = $("#proxy-test");
@@ -129,6 +139,18 @@ const initialPolishEnabled = (() => {
   return SITE_CONFIG.polish !== false;
 })();
 
+const initialDirectKeys = (() => {
+  try {
+    return {
+      siliconflow: localStorage.getItem(SILICONFLOW_KEY) || "",
+      deepseek: localStorage.getItem(DEEPSEEK_KEY) || "",
+    };
+  } catch (error) {
+    void error;
+    return { siliconflow: "", deepseek: "" };
+  }
+})();
+
 const state = {
   live: false,
   starting: false,
@@ -169,15 +191,19 @@ const state = {
   translationService: new TranslationService(),
   lastTranslationNoticeAt: 0,
   proxyBaseUrl: initialProxyUrl,
+  directSiliconKey: initialDirectKeys.siliconflow,
+  directDeepseekKey: initialDirectKeys.deepseek,
   polishEnabled: initialPolishEnabled,
   proxyHealth: null,
   autoMode: false,
+  autoSource: "none",
   autoCheckFailed: false,
   cloud: null,
   cloudStatus: "idle",
   lastDetectedLang: null,
   lastCloudErrorAt: 0,
   lastCloudLanguageAt: 0,
+  lastPolishNoticeAt: 0,
   settingsOpen: false,
   bubbleZ: 10,
   lastFinalText: "",
@@ -446,14 +472,31 @@ function setSettingsBusy(busy) {
 }
 
 function syncSettingsFields() {
+  sfKeyInput.value = state.directSiliconKey;
+  dsKeyInput.value = state.directDeepseekKey;
   proxyUrlInput.value = state.proxyBaseUrl;
   polishToggle.checked = state.polishEnabled;
-  polishToggle.disabled = Boolean(state.proxyHealth && !state.proxyHealth.polish);
+  polishToggle.disabled = Boolean(
+    !state.directDeepseekKey && state.proxyHealth && !state.proxyHealth.polish,
+  );
 }
 
 function updateSettingsStatusFromState() {
+  if (state.directSiliconKey) {
+    const polish = state.directDeepseekKey
+      ? state.polishEnabled
+        ? " · DeepSeek 润色可用"
+        : " · DeepSeek 润色已关闭"
+      : " · 未配置 DeepSeek 润色";
+    setSettingsStatus(
+      "ok",
+      `浏览器直连已配置 · SiliconFlow ASR（${SILICONFLOW_MODEL}）${polish}`,
+    );
+    return;
+  }
+
   if (state.autoCheckFailed) {
-    setSettingsStatus("error", "最近一次连接失败或未启用自动识别，请检查 Worker");
+    setSettingsStatus("error", "最近一次连接失败或未启用自动识别，请检查配置");
     return;
   }
 
@@ -465,39 +508,113 @@ function updateSettingsStatusFromState() {
           ? " · DeepSeek 润色可用"
           : " · DeepSeek 润色已关闭"
         : " · DeepSeek 未配置";
-      setSettingsStatus("ok", `已连接 · 自动识别可用${model}${polish}`);
+      setSettingsStatus("ok", `Worker 已连接 · 自动识别可用${model}${polish}`);
     } else {
-      setSettingsStatus("error", "代理已连接，但未配置 ASR_API_KEY，自动识别不可用");
+      setSettingsStatus("error", "Worker 已连接，但未配置 ASR_API_KEY，自动识别不可用");
     }
   } else if (state.proxyBaseUrl) {
-    setSettingsStatus("idle", "已填写地址，尚未测试连接");
+    setSettingsStatus("idle", "已填写 Worker 地址，尚未测试连接");
   } else {
-    setSettingsStatus("idle", "未配置代理，当前使用浏览器手动识别");
+    setSettingsStatus("idle", "未配置自动识别，当前使用浏览器手动识别");
   }
 }
 
 function updateProxyUI() {
+  const hasDirect = Boolean(state.directSiliconKey);
+  const hasProxy = Boolean(state.proxyBaseUrl);
+  const configured = hasDirect || hasProxy;
+
   autoChip.hidden = !state.autoMode;
   app.classList.toggle("auto-mode", state.autoMode);
-  settingsDot.hidden = Boolean(state.proxyBaseUrl) && !state.autoCheckFailed;
-  autoSetup.hidden =
-    state.autoMode || (Boolean(state.proxyBaseUrl) && !state.autoCheckFailed);
+  settingsDot.hidden = configured && !state.autoCheckFailed;
+  autoSetup.hidden = state.autoMode || (configured && !state.autoCheckFailed);
 
-  if (!state.proxyBaseUrl) {
-    autoSetupText.textContent = "未配置自动识别代理，将回退为手动选择语言";
+  if (!configured) {
+    autoSetupText.textContent = "未配置自动识别，请在设置中填写 SiliconFlow API Key";
   } else if (state.autoCheckFailed) {
     autoSetupText.textContent = "自动识别连接失败，已回退为手动选择语言";
   }
 
   polishCredit.hidden = !(
-    state.proxyBaseUrl &&
     state.polishEnabled &&
-    state.proxyHealth?.polish
+    (Boolean(state.directDeepseekKey) || state.proxyHealth?.polish)
   );
   polishToggle.checked = state.polishEnabled;
-  polishToggle.disabled = Boolean(state.proxyHealth && !state.proxyHealth.polish);
+  polishToggle.disabled = Boolean(
+    !state.directDeepseekKey && state.proxyHealth && !state.proxyHealth.polish,
+  );
   if (state.settingsOpen) updateSettingsStatusFromState();
   updateDockSubtitle();
+}
+
+function saveDirectKeys() {
+  const siliconflow = sfKeyInput.value.trim();
+  const deepseek = dsKeyInput.value.trim();
+
+  if (!siliconflow) {
+    setSettingsStatus("error", "请填写 SiliconFlow API Key");
+    sfKeyInput.focus();
+    return;
+  }
+
+  state.directSiliconKey = siliconflow;
+  state.directDeepseekKey = deepseek;
+  state.polishEnabled = polishToggle.checked;
+  state.autoCheckFailed = false;
+
+  try {
+    localStorage.setItem(SILICONFLOW_KEY, siliconflow);
+    if (deepseek) localStorage.setItem(DEEPSEEK_KEY, deepseek);
+    else localStorage.removeItem(DEEPSEEK_KEY);
+    localStorage.setItem(POLISH_KEY, state.polishEnabled ? "1" : "0");
+  } catch (error) {
+    void error;
+  }
+
+  if (!state.live) {
+    state.autoMode = true;
+    state.autoSource = "direct";
+  }
+
+  updateProxyUI();
+  syncSettingsFields();
+  updateSettingsStatusFromState();
+  showToast(
+    state.live
+      ? "直连 Key 已保存，重新开始会话后生效。"
+      : "浏览器直连已保存。",
+  );
+}
+
+function clearDirectKeys() {
+  if (state.live && state.autoSource === "direct") {
+    showToast("请先结束当前字幕，再清除直连 Key。");
+    return;
+  }
+
+  state.directSiliconKey = "";
+  state.directDeepseekKey = "";
+
+  try {
+    localStorage.removeItem(SILICONFLOW_KEY);
+    localStorage.removeItem(DEEPSEEK_KEY);
+  } catch (error) {
+    void error;
+  }
+
+  if (!state.live) {
+    state.autoMode = Boolean(state.proxyBaseUrl && state.proxyHealth?.asr);
+    state.autoSource = state.autoMode ? "worker" : "none";
+  }
+
+  syncSettingsFields();
+  updateProxyUI();
+  setSettingsStatus("idle", "直连 Key 已清除，当前使用浏览器手动识别");
+  showToast(
+    state.live
+      ? "直连 Key 已清除；重新开始会话后使用手动识别。"
+      : "直连 Key 已清除。",
+  );
 }
 
 async function checkProxy(baseUrl) {
@@ -525,8 +642,13 @@ function openSettings() {
   document.body.classList.add("settings-open");
   syncSettingsFields();
   updateSettingsStatusFromState();
-  proxyUrlInput.style.borderColor = "";
-  window.setTimeout(() => settingsClose.focus({ preventScroll: true }), 80);
+  window.setTimeout(() => {
+    if (!state.directSiliconKey) {
+      sfKeyInput.focus({ preventScroll: true });
+    } else {
+      settingsClose.focus({ preventScroll: true });
+    }
+  }, 80);
 }
 
 function closeSettings(restoreFocus = true) {
@@ -590,7 +712,7 @@ async function saveProxyFromForm() {
     const health = await checkProxy(baseUrl);
     state.proxyBaseUrl = baseUrl;
     state.proxyHealth = health;
-    state.autoCheckFailed = !health.asr;
+    state.autoCheckFailed = !health.asr && !state.directSiliconKey;
     state.polishEnabled = polishToggle.checked;
 
     try {
@@ -601,14 +723,21 @@ async function saveProxyFromForm() {
     }
 
     if (!state.live) {
-      state.autoMode = Boolean(health.asr);
+      state.autoMode = Boolean(state.directSiliconKey || health.asr);
+      state.autoSource = state.directSiliconKey
+        ? "direct"
+        : health.asr
+          ? "worker"
+          : "none";
     }
 
     updateProxyUI();
     syncSettingsFields();
     proxyUrlInput.value = baseUrl;
 
-    if (!health.asr) {
+    if (state.directSiliconKey) {
+      setSettingsStatus("ok", "Worker 已保存；当前优先使用浏览器直连");
+    } else if (!health.asr) {
       setSettingsStatus("error", "已保存，但 Worker 未配置 ASR_API_KEY，自动识别不可用");
     } else {
       const model = health.asrModel ? `（${health.asrModel}）` : "";
@@ -648,16 +777,21 @@ function clearProxySettings() {
   state.polishEnabled = SITE_CONFIG.polish !== false;
 
   if (!state.live) {
-    state.autoMode = false;
+    state.autoMode = Boolean(state.directSiliconKey);
+    state.autoSource = state.directSiliconKey ? "direct" : "none";
   }
 
   syncSettingsFields();
   updateProxyUI();
-  setSettingsStatus("idle", "配置已清除，当前使用浏览器手动识别");
+  if (state.directSiliconKey) {
+    updateSettingsStatusFromState();
+  } else {
+    setSettingsStatus("idle", "Worker 配置已清除，当前使用浏览器手动识别");
+  }
   showToast(
     state.live
-      ? "配置已清除，当前会话继续；重新开始后将使用手动识别。"
-      : "自动识别配置已清除。",
+      ? "Worker 配置已清除，当前会话继续；重新开始后生效。"
+      : "Worker 配置已清除。",
   );
 }
 
@@ -828,6 +962,7 @@ function resetSession() {
   state.lastDetectedLang = null;
   state.lastCloudErrorAt = 0;
   state.lastCloudLanguageAt = 0;
+  state.lastPolishNoticeAt = 0;
   state.speakerByKey.clear();
   state.speakers.clear();
   state.fallbackSpeaker = null;
@@ -917,13 +1052,21 @@ async function startSession() {
     }
 
     let autoMode = false;
-    if (state.proxyBaseUrl) {
+    let autoSource = "none";
+
+    if (state.directSiliconKey) {
+      autoMode = true;
+      autoSource = "direct";
+      state.autoCheckFailed = false;
+      setLoader(68, "正在准备浏览器直连…");
+    } else if (state.proxyBaseUrl) {
       setLoader(66, "正在连接自动识别代理…");
       try {
         const health = await checkProxy(state.proxyBaseUrl);
         state.proxyHealth = health;
         state.autoCheckFailed = !health.asr;
         autoMode = Boolean(health.asr);
+        autoSource = autoMode ? "worker" : "none";
         if (!health.asr) {
           startupNotice = "自动识别代理未配置 ASR Key，已回退为手动识别。";
           startupNoticeIsError = true;
@@ -938,15 +1081,17 @@ async function startSession() {
     } else {
       state.proxyHealth = null;
       state.autoCheckFailed = false;
-      startupNotice = "未配置自动识别代理，当前使用手动识别。可在右上角齿轮配置。";
+      startupNotice =
+        "未配置自动识别，请在右上角齿轮填写 SiliconFlow API Key。";
     }
 
     state.autoMode = autoMode;
+    state.autoSource = autoSource;
 
     if (!state.autoMode && !RecognitionController.isSupported()) {
       const error = new Error("No speech recognizer");
       error.userMessage =
-        "当前浏览器不支持手动语音回退。请配置自动识别代理，或使用 Chrome / Edge。";
+        "当前浏览器不支持手动语音回退。请填写 SiliconFlow API Key，或使用 Chrome / Edge。";
       throw error;
     }
 
@@ -980,6 +1125,7 @@ async function startSession() {
       } catch (error) {
         void error;
         state.autoMode = false;
+        state.autoSource = "none";
         state.autoCheckFailed = true;
         updateProxyUI();
         startupNotice = "自动识别启动失败，已回退为手动识别。";
@@ -1021,6 +1167,7 @@ async function startSession() {
     state.starting = false;
     state.live = false;
     state.autoMode = false;
+    state.autoSource = "none";
     state.tracker?.reset();
     setStartBusy(false);
     setLoaderFailure("准备失败");
@@ -1079,7 +1226,15 @@ function stopSession(manual = true) {
   liveChip.classList.remove("is-warn");
   liveText.textContent = "待机";
   state.speechIssue = null;
-  state.autoMode = Boolean(state.proxyBaseUrl && state.proxyHealth?.asr);
+  state.autoMode = Boolean(
+    state.directSiliconKey ||
+      (state.proxyBaseUrl && state.proxyHealth?.asr),
+  );
+  state.autoSource = state.directSiliconKey
+    ? "direct"
+    : state.autoMode
+      ? "worker"
+      : "none";
   updateProxyUI();
 
   if (manual) {
@@ -1184,12 +1339,14 @@ function handleCloudError(error) {
   if (!noSpeech && (!state.lastCloudErrorAt || now - state.lastCloudErrorAt > 8000)) {
     state.lastCloudErrorAt = now;
     let message = "自动识别失败，正在重试。";
-    if (/429|rate limit|频繁/i.test(raw)) {
+    if (/401|unauthorized|invalid|api key/i.test(raw)) {
+      message = "SiliconFlow API Key 无效或已过期，请在设置中更新。";
+    } else if (/429|rate limit|频繁/i.test(raw)) {
       message = "自动识别请求过于频繁，请稍后再试。";
     } else if (/timeout|超时|network|fetch|连接/i.test(raw)) {
-      message = "自动识别代理连接失败，请检查 Worker。";
+      message = "自动识别服务连接失败，请检查网络。";
     } else if (/ASR_API_KEY|GROQ|configuration|not configured/i.test(raw)) {
-      message = "Worker 未配置 ASR_API_KEY，无法自动识别。";
+      message = "自动识别服务未配置，请检查设置。";
     }
     showToast(message, { error: true, duration: 5200 });
   }
@@ -1198,14 +1355,69 @@ function handleCloudError(error) {
   updateDockSubtitle();
 }
 
+async function transcribeWithWorker(blob, signal) {
+  const form = new FormData();
+  form.append("file", blob, "speech.wav");
+  const response = await fetch(`${state.proxyBaseUrl}/transcribe`, {
+    method: "POST",
+    body: form,
+    signal,
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(data?.error || `语音识别失败 (${response.status})`);
+  }
+  return {
+    text: data?.text || "",
+    language: data?.language || "",
+  };
+}
+
+async function transcribeWithSiliconFlow(blob, signal) {
+  if (!state.directSiliconKey) {
+    throw new Error("未配置 SiliconFlow API Key");
+  }
+
+  const form = new FormData();
+  form.append("file", blob, "speech.wav");
+  form.append("model", SILICONFLOW_MODEL);
+
+  const response = await fetch(SILICONFLOW_ENDPOINT, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${state.directSiliconKey}`,
+    },
+    body: form,
+    signal,
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message =
+      data?.message ||
+      data?.error?.message ||
+      `SiliconFlow 识别失败 (${response.status})`;
+    throw new Error(message);
+  }
+  return {
+    text: data?.text || data?.result?.text || "",
+    language: data?.language || "",
+  };
+}
+
 function startCloudSpeech() {
-  if (!state.proxyBaseUrl || !state.audioContext || !state.audioSource) {
+  if (!state.audioContext || !state.audioSource) {
     throw new Error("自动识别音频通道未就绪");
   }
+
+  const transcribeAudio =
+    state.autoSource === "direct"
+      ? transcribeWithSiliconFlow
+      : transcribeWithWorker;
+
   state.cloud = new CloudSpeechRecognizer({
     audioContext: state.audioContext,
     sourceNode: state.audioSource,
-    proxyBaseUrl: state.proxyBaseUrl,
+    transcribeAudio,
     onResult: handleCloudResult,
     onStatus: handleCloudStatus,
     onError: handleCloudError,
@@ -2032,13 +2244,73 @@ async function runEntryTranslation(entry) {
 }
 
 function canPolishEntry(entry) {
+  const hasProvider = Boolean(
+    state.directDeepseekKey ||
+      (state.proxyBaseUrl && state.proxyHealth?.polish),
+  );
   return Boolean(
-    state.proxyBaseUrl &&
+    hasProvider &&
     state.polishEnabled &&
-    state.proxyHealth?.polish &&
     entry?.translation &&
     isEntryCurrent(entry),
   );
+}
+
+function cleanPolishResult(value) {
+  let text = String(value || "").trim();
+  text = text.replace(/^```(?:\w+)?\s*/i, "").replace(/```$/, "").trim();
+  text = text.replace(/^(translation|final translation|译文|翻译)\s*[:：]\s*/i, "").trim();
+  text = text.replace(/^["“]([\s\S]*)["”]$/, "$1").trim();
+  return text.slice(0, 2000);
+}
+
+async function polishWithDeepSeekDirect(sourceLang, targetLang, source, draft) {
+  if (!state.directDeepseekKey) {
+    throw new Error("未配置 DeepSeek API Key");
+  }
+
+  const sourceName = sourceLang === "zh-CN" ? "Simplified Chinese" : "English";
+  const targetName = targetLang === "zh-CN" ? "Simplified Chinese" : "English";
+  const system = [
+    "You are a professional live subtitle editor and native bilingual translator.",
+    `Polish the draft translation so it sounds natural, idiomatic, and fluent in ${targetName}.`,
+    "Preserve the exact meaning, tone, names, numbers, and facts from the source.",
+    "Do not add new information or commentary. Keep it concise enough for a live subtitle.",
+    "Return only the final translation. Do not wrap it in quotes or code fences.",
+  ].join(" ");
+  const user = [
+    `Source (${sourceName}): ${source}`,
+    `Draft (${targetName}): ${draft}`,
+    "Final polished translation:",
+  ].join("\n");
+
+  const response = await fetch(DEEPSEEK_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${state.directDeepseekKey}`,
+    },
+    body: JSON.stringify({
+      model: DEEPSEEK_MODEL,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      temperature: 0.25,
+      max_tokens: 600,
+      stream: false,
+    }),
+    signal: AbortSignal.timeout(20000),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(
+      data?.error?.message ||
+        data?.message ||
+        `DeepSeek 润色失败 (${response.status})`,
+    );
+  }
+  return data?.choices?.[0]?.message?.content || "";
 }
 
 function scheduleEntryPolish(entry) {
@@ -2083,28 +2355,40 @@ async function runEntryPolish(entry) {
   refreshEntryTranslationUI(entry);
 
   try {
-    const response = await fetch(`${state.proxyBaseUrl}/polish`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    let polished = "";
+
+    if (state.directDeepseekKey) {
+      polished = await polishWithDeepSeekDirect(
         sourceLang,
         targetLang,
-        source: requestSource,
-        draft: requestDraft,
-      }),
-      signal: AbortSignal.timeout(20000),
-    });
-    const data = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(data?.error || "DeepSeek polish failed");
+        requestSource,
+        requestDraft,
+      );
+    } else {
+      const response = await fetch(`${state.proxyBaseUrl}/polish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceLang,
+          targetLang,
+          source: requestSource,
+          draft: requestDraft,
+        }),
+        signal: AbortSignal.timeout(20000),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || "DeepSeek polish failed");
+      }
+      polished = data?.text || "";
     }
 
     if (!isEntryCurrent(entry)) return;
 
     if (entry.text === requestSource && entry.translation === requestDraft) {
-      const polished = normalizeText(data?.text);
-      if (polished && polished !== requestDraft) {
-        entry.translation = polished;
+      const cleaned = cleanPolishResult(polished);
+      if (cleaned && cleaned !== requestDraft) {
+        entry.translation = cleaned;
       }
       entry.polishError = "";
       entry.translationStatus = "done";
@@ -2118,6 +2402,18 @@ async function runEntryPolish(entry) {
       entry.translationStatus = "done";
     } else {
       entry.polishDirty = true;
+    }
+
+    const now = performance.now();
+    if (!state.lastPolishNoticeAt || now - state.lastPolishNoticeAt > 15000) {
+      state.lastPolishNoticeAt = now;
+      const raw = String(error?.message || "");
+      showToast(
+        /401|unauthorized|invalid|api key/i.test(raw)
+          ? "DeepSeek API Key 无效，已保留基础译文。"
+          : "DeepSeek 润色失败，已保留基础译文。",
+        { error: true, duration: 5200 },
+      );
     }
   } finally {
     entry.polishInFlight = false;
@@ -2619,6 +2915,8 @@ function bindEvents() {
   heroSettingsBtn.addEventListener("click", openSettings);
   settingsClose.addEventListener("click", () => closeSettings());
   settingsScrim.addEventListener("click", () => closeSettings());
+  directSaveBtn.addEventListener("click", saveDirectKeys);
+  directClearBtn.addEventListener("click", clearDirectKeys);
   proxyTestBtn.addEventListener("click", testProxyFromForm);
   proxySaveBtn.addEventListener("click", saveProxyFromForm);
   proxyClearBtn.addEventListener("click", clearProxySettings);
@@ -2675,7 +2973,8 @@ function bindEvents() {
 
 function init() {
   state.proxyBaseUrl = normalizeProxyUrl(state.proxyBaseUrl);
-  state.autoMode = Boolean(state.proxyBaseUrl);
+  state.autoMode = Boolean(state.directSiliconKey || state.proxyBaseUrl);
+  state.autoSource = state.directSiliconKey ? "direct" : "none";
   settingsModal.inert = true;
   applyPreferences();
   resetSession();

@@ -108,8 +108,8 @@
               <span class="start-btn-spinner" aria-hidden="true"></span>
             </button>
             <p class="permission-note">
-              需要摄像头与麦克风 · 自动识别与润色由自建代理完成<br />
-              语音与文字需联网 · 推荐桌面版 Chrome / Edge
+              需要摄像头与麦克风 · 自动识别与润色需联网<br />
+              API Key 只保存在本机浏览器 · 推荐桌面版 Chrome / Edge
             </p>
           </div>
 
@@ -117,7 +117,7 @@
 
           <p class="auto-setup" id="auto-setup">
             <span class="auto-setup-dot"></span>
-            <span id="auto-setup-text">未配置自动识别代理，将回退为手动选择语言</span>
+            <span id="auto-setup-text">未配置自动识别，请在设置中填写 SiliconFlow API Key</span>
             <button type="button" class="inline-link" id="hero-settings-btn">去配置</button>
           </p>
 
@@ -247,31 +247,62 @@
         </header>
         <div class="settings-body">
           <p class="settings-intro">
-            通过你自己的 Cloudflare Worker 代理连接云端自动语音识别（SiliconFlow SenseVoice / Whisper 等）与 DeepSeek 润色。配置后无需再手动选择说话语言。
+            推荐使用浏览器直连：填入 SiliconFlow 和 DeepSeek 的 API Key，不需要 Worker 或域名。配置后无需再手动选择说话语言。
           </p>
           <div class="settings-status" id="settings-status" data-state="idle">
             <i></i>
-            <span id="settings-status-text">未配置代理</span>
+            <span id="settings-status-text">未配置自动识别</span>
           </div>
-          <label class="field">
-            <span>Worker 地址</span>
-            <input id="proxy-url-input" type="url" inputmode="url" placeholder="https://necktalk-proxy.xxx.workers.dev" autocomplete="off" spellcheck="false" />
-          </label>
-          <label class="toggle-row">
-            <input id="polish-toggle" type="checkbox" checked />
-            <span>使用 DeepSeek 润色译文</span>
-          </label>
-          <div class="settings-actions">
-            <button type="button" class="settings-btn secondary" id="proxy-test">测试连接</button>
-            <button type="button" class="settings-btn primary" id="proxy-save">保存</button>
-            <button type="button" class="settings-btn quiet" id="proxy-clear">清除</button>
-          </div>
-          <div class="settings-help">
-            <p>Worker 需配置 <code>ASR_API_KEY</code>（默认接入 SiliconFlow SenseVoice，也可换其他 OpenAI 兼容 ASR）和 <code>DEEPSEEK_API_KEY</code>（润色）。密钥只保存在 Worker 服务端，网页不会接触 API Key。</p>
-            <p>这里保存的地址仅对当前浏览器生效。要让所有访客都使用自动识别，请把地址填入 <code>assets/config.js</code> 的 <code>proxyBaseUrl</code> 并重新部署。</p>
-            <p>未配置代理时，会自动回退到浏览器语音识别，并需要手动切换「说话语言」。</p>
-            <a href="https://github.com/232yhzhang/necktalk#自建代理" target="_blank" rel="noopener">查看 Worker 部署说明</a>
-          </div>
+
+          <section class="settings-direct">
+            <div class="settings-section-head">
+              <p class="settings-kicker">BROWSER DIRECT</p>
+              <h3>浏览器直连</h3>
+            </div>
+            <p class="settings-note">
+              SiliconFlow 负责自动语音识别，DeepSeek 负责译文润色。Key 只保存在当前浏览器。
+              <a href="https://cloud.siliconflow.cn/" target="_blank" rel="noopener">创建 SiliconFlow Key</a>
+              ·
+              <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">创建 DeepSeek Key</a>
+            </p>
+            <label class="field">
+              <span>SiliconFlow API Key</span>
+              <input id="sf-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-..." />
+            </label>
+            <label class="field">
+              <span>DeepSeek API Key（可选，用于润色）</span>
+              <input id="ds-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-..." />
+            </label>
+            <label class="toggle-row">
+              <input id="polish-toggle" type="checkbox" checked />
+              <span>使用 DeepSeek 润色译文</span>
+            </label>
+            <div class="settings-actions">
+              <button type="button" class="settings-btn primary" id="direct-save">保存并启用</button>
+              <button type="button" class="settings-btn quiet" id="direct-clear">清除密钥</button>
+            </div>
+            <p class="settings-warning">Key 仅存储在这台设备的浏览器中；共享页面时，其他访客需要填写自己的 Key。不要在公用电脑保存。</p>
+          </section>
+
+          <details class="settings-worker">
+            <summary>高级：使用自建 Worker 代理</summary>
+            <div class="settings-worker-body">
+              <p class="settings-note">适合已部署了可访问 Worker 的用户。密钥保存在 Worker 服务端，网页不会接触 Key。</p>
+              <label class="field">
+                <span>Worker 地址</span>
+                <input id="proxy-url-input" type="url" inputmode="url" placeholder="https://necktalk-proxy.xxx.workers.dev" autocomplete="off" spellcheck="false" />
+              </label>
+              <div class="settings-actions">
+                <button type="button" class="settings-btn secondary" id="proxy-test">测试连接</button>
+                <button type="button" class="settings-btn primary" id="proxy-save">保存 Worker</button>
+                <button type="button" class="settings-btn quiet" id="proxy-clear">清除</button>
+              </div>
+              <div class="settings-help">
+                <p>Worker 需配置 <code>ASR_API_KEY</code> 与 <code>DEEPSEEK_API_KEY</code>。要让所有访客默认使用 Worker，请把地址填入 <code>assets/config.js</code> 的 <code>proxyBaseUrl</code> 并重新部署。</p>
+                <a href="https://github.com/232yhzhang/necktalk#自建代理" target="_blank" rel="noopener">查看 Worker 部署说明</a>
+              </div>
+            </div>
+          </details>
         </div>
       </section>
 
