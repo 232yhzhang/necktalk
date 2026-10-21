@@ -29,6 +29,7 @@ const SPEECH_MESSAGES = {
 const $ = (selector) => document.querySelector(selector);
 
 const app = $("#app");
+const hero = $("#hero");
 const video = $("#camera");
 const stage = $("#stage");
 const startBtn = $("#start-btn");
@@ -555,6 +556,7 @@ async function startSession() {
 
   state.starting = true;
   hideHint();
+  hero.inert = true;
   setStartBusy(true);
   showLoader("正在请求摄像头与麦克风…");
   setLoader(10, "");
@@ -588,6 +590,9 @@ async function startSession() {
 
     document.body.classList.add("is-live");
     app.classList.add("is-live");
+    hero.inert = true;
+    dock.inert = false;
+    dock.setAttribute("aria-hidden", "false");
 
     try {
       await video.play();
@@ -619,6 +624,9 @@ async function startSession() {
     showToast(message, { error: true, duration: 6500 });
     document.body.classList.remove("is-live");
     app.classList.remove("is-live");
+    hero.inert = false;
+    dock.inert = true;
+    dock.setAttribute("aria-hidden", "true");
   }
 }
 
@@ -657,6 +665,9 @@ function stopSession(manual = true) {
   closePanel();
   document.body.classList.remove("is-live");
   app.classList.remove("is-live");
+  hero.inert = false;
+  dock.inert = true;
+  dock.setAttribute("aria-hidden", "true");
   liveChip.classList.remove("is-warn");
   liveText.textContent = "待机";
   state.speechIssue = null;
@@ -670,6 +681,7 @@ function stopSession(manual = true) {
       startBtnText.textContent = "开启摄像头 · 开始字幕";
     }
     setStartBusy(false);
+    window.setTimeout(() => startBtn.focus({ preventScroll: true }), 300);
   }
 }
 
@@ -1668,6 +1680,7 @@ function init() {
   applyPreferences();
   resetSession();
   preflight();
+  dock.inert = true;
   updateSpeechUI();
   bindEvents();
 
