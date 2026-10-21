@@ -1650,6 +1650,14 @@ function ensureSpeakerForFace(faceId) {
   const existing = state.speakers.get(faceId);
   if (existing) return existing;
 
+  if (state.lastSpeaker && state.lastSpeaker.faceId !== faceId) {
+    const candidate = findAdoptableFace(state.lastSpeaker, performance.now());
+    if (candidate && candidate.id === faceId) {
+      adoptSpeakerFace(state.lastSpeaker, faceId);
+      return state.lastSpeaker;
+    }
+  }
+
   if (state.fallbackSpeaker) {
     const speaker = state.fallbackSpeaker;
     state.fallbackSpeaker = null;
@@ -1682,6 +1690,7 @@ function createSpeaker(faceId) {
     bubbleH: 0,
     x: 0,
     y: 0,
+    anchorX: 0,
     hasPosition: false,
     z: 0,
     updatedAt: 0,
@@ -1854,7 +1863,45 @@ function renderSpeaker(speaker, now = performance.now()) {
   speaker.el.classList.add("is-visible");
 }
 
+function findAdoptableFace(speaker, now = performance.now()) {
+  if (!speaker || !state.tracker) return null;
+
+  if (speaker.faceId != null) {
+    const track = state.tracker.getTrack(speaker.faceId);
+    if (track && now - track.lastSeen < 300) return null;
+    if (!track || now - track.lastSeen > 2200) return null;
+  }
+
+  const candidates = [];
+  for (const face of state.faces.values()) {
+    if (face.id === speaker.faceId) continue;
+    if (now - face.lastSeenAt > 900) continue;
+    const owner = state.speakers.get(face.id);
+    if (owner && owner !== speaker) continue;
+    candidates.push(face);
+  }
+
+  if (candidates.length === 1) return candidates[0];
+  return candidates.find((face) => face.id === state.activeFaceId) || null;
+}
+
+function adoptSpeakerFace(speaker, faceId) {
+  if (!speaker || faceId == null || speaker.faceId === faceId) return;
+
+  const previousId = speaker.faceId;
+  speaker.faceId = faceId;
+  speaker.hasPosition = false;
+  state.speakers.set(faceId, speaker);
+  if (state.fallbackSpeaker === speaker) state.fallbackSpeaker = null;
+
+  if (state.lastTextFaceId === previousId) state.lastTextFaceId = faceId;
+  if (state.activeFaceId === previousId) state.activeFaceId = faceId;
+}
+
 function positionSpeaker(speaker, now, snap = false) {
+  const replacement = findAdoptableFace(speaker, now);
+  if (replacement) adoptSpeakerFace(speaker, replacement.id);
+
   const target = computeBubbleTarget(speaker);
   if (!target) {
     hideSpeaker(speaker);
@@ -1864,13 +1911,19 @@ function positionSpeaker(speaker, now, snap = false) {
   if (!speaker.hasPosition || snap) {
     speaker.x = target.x;
     speaker.y = target.y;
+    speaker.anchorX = target.anchorX;
     speaker.hasPosition = true;
   } else {
-    const factor = 0.27;
+    const factor = 0.5;
     speaker.x += (target.x - speaker.x) * factor;
     speaker.y += (target.y - speaker.y) * factor;
+    speaker.anchorX = target.anchorX;
   }
 
+  const bubbleWidth = Math.max(1, speaker.bubbleW || speaker.el.offsetWidth || 220);
+  const left = speaker.x - bubbleWidth / 2;
+  const anchorX = clamp(speaker.anchorX - left, 16, bubbleWidth - 16);
+  speaker.el.style.setProperty("--anchor-x", `${anchorX.toFixed(1)}px`);
   speaker.el.style.transform = `translate3d(${speaker.x}px, ${speaker.y}px, 0) translateX(-50%)`;
 }
 
@@ -1889,17 +1942,21 @@ function computeBubbleTarget(speaker) {
 
   if (!faceFresh) {
     speaker.el?.classList.add("is-detached");
+    speaker.el?.classList.remove("is-side");
     const minX = Math.min(bubbleWidth / 2 + 14, width / 2);
     const maxX = Math.max(width - bubbleWidth / 2 - 14, width / 2);
     return {
       x: clamp(width / 2, minX, maxX),
       y: clamp(height - bottomSafe - bubbleHeight, topLimit, maxTop),
+      anchorX: width / 2,
     };
   }
 
-  speaker.el?.classList.remove("is-detached");
+  speaker.el?.classList.remove("is-detached", "is-side");
   const neck = mapPoint(track.neck.x, track.neck.y);
   const faceBox = mapBox(track.box);
+  const anchorX = neck.x;
+  let side = false;
   let x = clamp(
     neck.x,
     Math.min(bubbleWidth / 2 + 14, width / 2),
@@ -1914,6 +1971,7 @@ function computeBubbleTarget(speaker) {
     const canLeft = leftX - bubbleWidth / 2 >= 14;
 
     if (canRight || canLeft) {
+      side = true;
       x = canRight ? rightX : leftX;
       y = faceBox.y + faceBox.h * 0.5 - bubbleHeight * 0.5;
     } else {
@@ -1927,8 +1985,9 @@ function computeBubbleTarget(speaker) {
     Math.max(width - bubbleWidth / 2 - 14, width / 2),
   );
   y = clamp(y, topLimit, maxTop);
+  if (side) speaker.el?.classList.add("is-side");
 
-  return { x, y };
+  return { x, y, anchorX };
 }
 
 function mapPoint(nx, ny) {

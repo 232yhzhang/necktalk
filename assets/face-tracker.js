@@ -79,20 +79,25 @@ export class FaceTracker {
           y: (box.y + box.h / 2),
         },
         neck: {
-          x: chin.x,
+          x: box.x + box.w / 2,
           y: Math.min(0.99, chin.y + faceHeight * 0.3),
         },
         jaw: jawOpen,
       };
     });
 
-    const available = [...this.tracks.values()].filter((track) => now - track.lastSeen < 3000);
+    const available = [...this.tracks.values()].filter((track) => now - track.lastSeen < 5000);
     const claimed = new Set();
     const seenIds = new Set();
 
+    const soleTrack =
+      detections.length === 1 &&
+      available.length === 1 &&
+      now - available[0].lastSeen < 1600;
+
     for (const detection of detections) {
       let match = null;
-      let bestDistance = 0.17 * 0.17;
+      let bestDistance = soleTrack ? Number.POSITIVE_INFINITY : 0.2 * 0.2;
 
       for (const track of available) {
         if (claimed.has(track.id)) continue;
@@ -121,15 +126,15 @@ export class FaceTracker {
       claimed.add(match.id);
       seenIds.add(match.id);
 
-      const smooth = 0.58;
+      const smooth = 0.8;
       match.center.x += (detection.center.x - match.center.x) * smooth;
       match.center.y += (detection.center.y - match.center.y) * smooth;
       match.neck.x += (detection.neck.x - match.neck.x) * smooth;
       match.neck.y += (detection.neck.y - match.neck.y) * smooth;
-      match.box.x += (detection.box.x - match.box.x) * 0.45;
-      match.box.y += (detection.box.y - match.box.y) * 0.45;
-      match.box.w += (detection.box.w - match.box.w) * 0.45;
-      match.box.h += (detection.box.h - match.box.h) * 0.45;
+      match.box.x += (detection.box.x - match.box.x) * 0.6;
+      match.box.y += (detection.box.y - match.box.y) * 0.6;
+      match.box.w += (detection.box.w - match.box.w) * 0.6;
+      match.box.h += (detection.box.h - match.box.h) * 0.6;
       match.jaw = detection.jaw;
       match.lastSeen = now;
     }

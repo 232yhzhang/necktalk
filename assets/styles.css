@@ -1435,7 +1435,9 @@ svg {
 }
 
 .subtitle.is-detached::before,
-.subtitle.is-detached::after {
+.subtitle.is-detached::after,
+.subtitle.is-side::before,
+.subtitle.is-side::after {
   display: none;
 }
 
@@ -1443,7 +1445,7 @@ svg {
   content: "";
   position: absolute;
   top: -12px;
-  left: 50%;
+  left: var(--anchor-x, 50%);
   width: 1px;
   height: 12px;
   background: linear-gradient(transparent, var(--speaker, #ffb86b));
@@ -1453,7 +1455,7 @@ svg {
   content: "";
   position: absolute;
   top: -14px;
-  left: 50%;
+  left: var(--anchor-x, 50%);
   width: 5px;
   height: 5px;
   margin-left: -2.5px;
