@@ -1,0 +1,13 @@
+name = "necktalk-proxy"
+main = "index.js"
+compatibility_date = "2026-10-21"
+
+[vars]
+ALLOWED_ORIGINS = "https://232yhzhang.github.io,http://localhost:4173,http://127.0.0.1:4173,http://localhost:8787"
+
+# Set these with:
+#   npx wrangler secret put GROQ_API_KEY
+#   npx wrangler secret put DEEPSEEK_API_KEY
+# Optional model overrides:
+# GROQ_MODEL = "whisper-large-v3-turbo"
+# DEEPSEEK_MODEL = "deepseek-chat"

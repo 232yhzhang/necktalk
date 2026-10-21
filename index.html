@@ -7,12 +7,12 @@
     <meta name="color-scheme" content="dark" />
     <meta
       name="description"
-      content="NeckTalk 颈边实时双语字幕：用摄像头与麦克风识别中英文语音，实时翻译成另一种语言，把带发言人署名的双语字幕贴在说话人的脖子旁边。"
+      content="NeckTalk 颈边实时双语字幕：自动识别中英文语音，无需手动选择语言。说中文出英文、说英文出中文，双语字幕跟随说话人颈部。"
     />
     <meta property="og:title" content="NeckTalk · 颈边实时双语字幕" />
     <meta
       property="og:description"
-      content="实时中英互译，原文与译文同时显示，自动跟随说话人颈部，不遮脸、不串台。"
+      content="自动识别中英文并实时互译，原文与译文同时显示，跟随说话人颈部，不遮脸、不串台。"
     />
     <meta property="og:type" content="website" />
     <title>NeckTalk · 颈边实时双语字幕</title>
@@ -50,11 +50,21 @@
             <span id="live-text">待机</span>
           </div>
 
-          <div class="lang-switch" role="group" aria-label="选择说话语言，字幕会显示另一种语言的翻译">
+          <span class="auto-chip" id="auto-chip" hidden><i></i>自动识别</span>
+
+          <div class="lang-switch" role="group" aria-label="回退模式：选择说话语言，字幕会显示另一种语言的翻译">
             <span class="lang-label">说话语言</span>
             <button type="button" class="lang-btn is-active" data-lang="zh-CN" aria-pressed="true" title="说中文，自动翻译成英文">中文</button>
             <button type="button" class="lang-btn" data-lang="en-US" aria-pressed="false" title="Speak English, translate into Chinese">EN</button>
           </div>
+
+          <button type="button" class="icon-btn" id="settings-btn" aria-label="自动识别与润色设置" aria-expanded="false" title="自动识别与润色设置">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7V20a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.8v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2Z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <span class="settings-dot" id="settings-dot" hidden></span>
+          </button>
 
           <button type="button" class="icon-btn" id="panel-btn" aria-label="打开字幕记录" aria-expanded="false" title="字幕记录">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -79,11 +89,11 @@
 
       <main class="hero" id="hero">
         <section class="hero-copy">
-          <p class="eyebrow"><span class="eyebrow-dot"></span> REAL-TIME BILINGUAL CAPTIONS</p>
+          <p class="eyebrow"><span class="eyebrow-dot"></span> AUTO LANGUAGE · LIVE TRANSLATION</p>
           <h1>每句话，<br /><span class="accent-line">中英同屏。</span></h1>
           <p class="lede">
-            打开摄像头，实时识别中英文语音，并自动翻译。<br />
-            双语字幕贴在说话人脖子旁，不遮脸。
+            不需要选择语言，直接说中文或英文。<br />
+            自动识别并实时互译，字幕贴在脖子旁，不遮脸。
           </p>
 
           <div class="hero-actions">
@@ -98,18 +108,24 @@
               <span class="start-btn-spinner" aria-hidden="true"></span>
             </button>
             <p class="permission-note">
-              需要摄像头与麦克风权限 · 语音识别与翻译需联网<br />
-              推荐桌面版 Chrome / Edge · 右上角切换 <b>说话语言</b>
+              需要摄像头与麦克风 · 自动识别与润色由自建代理完成<br />
+              语音与文字需联网 · 推荐桌面版 Chrome / Edge
             </p>
           </div>
 
           <p class="setup-error" id="setup-error" role="alert" hidden></p>
 
+          <p class="auto-setup" id="auto-setup">
+            <span class="auto-setup-dot"></span>
+            <span id="auto-setup-text">未配置自动识别代理，将回退为手动选择语言</span>
+            <button type="button" class="inline-link" id="hero-settings-btn">去配置</button>
+          </p>
+
           <ul class="feature-chips" aria-label="功能">
-            <li><i class="chip-dot chip-dot-a"></i>实时翻译</li>
-            <li><i class="chip-dot chip-dot-b"></i>发言人识别</li>
-            <li><i class="chip-dot chip-dot-c"></i>中英双语</li>
-            <li><i class="chip-dot chip-dot-d"></i>画面本地处理</li>
+            <li><i class="chip-dot chip-dot-a"></i>自动识别中 / 英</li>
+            <li><i class="chip-dot chip-dot-b"></i>实时互译</li>
+            <li><i class="chip-dot chip-dot-c"></i>发言人识别</li>
+            <li><i class="chip-dot chip-dot-d"></i>DeepSeek 润色</li>
           </ul>
         </section>
 
@@ -118,7 +134,7 @@
           <div class="preview-card">
             <div class="preview-bar">
               <span class="preview-cam"><i></i> CAM 01</span>
-              <span class="preview-bar-meta">ZH → EN · LIVE</span>
+              <span class="preview-bar-meta">AUTO · ZH ↔ EN</span>
             </div>
             <div class="preview-stage">
               <div class="preview-bg"></div>
@@ -163,7 +179,7 @@
           <div class="eq" id="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
           <div class="dock-copy">
             <strong id="dock-title">正在聆听</strong>
-            <span id="dock-sub">中文 → English · 正在寻找发言人</span>
+            <span id="dock-sub">自动识别 · 中文 / English · 正在寻找发言人</span>
           </div>
         </div>
         <div class="dock-actions">
@@ -213,10 +229,51 @@
         </div>
         <div class="panel-foot">
           <span><i class="foot-dot"></i> 字幕仅保存在本页</span>
-          <span class="panel-credit">翻译 <a href="https://www.deepl.com/" target="_blank" rel="noopener">DeepL</a> · <a href="https://mymemory.translated.net/" target="_blank" rel="noopener">MyMemory</a></span>
+          <span class="panel-credit">翻译 <a href="https://www.deepl.com/" target="_blank" rel="noopener">DeepL</a><span id="polish-credit" hidden> · 润色 DeepSeek</span></span>
           <span id="panel-count">0 条</span>
         </div>
       </aside>
+
+      <div class="settings-scrim" id="settings-scrim" aria-hidden="true"></div>
+      <section class="settings-modal" id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" aria-hidden="true">
+        <header class="settings-head">
+          <div>
+            <p class="panel-kicker">AUTO MODE</p>
+            <h2 id="settings-title">自动识别与润色</h2>
+          </div>
+          <button type="button" class="icon-btn" id="settings-close" aria-label="关闭设置">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
+        </header>
+        <div class="settings-body">
+          <p class="settings-intro">
+            通过你自己的 Cloudflare Worker 代理连接云端自动语音识别（Groq Whisper）与 DeepSeek 润色。配置后无需再手动选择说话语言。
+          </p>
+          <div class="settings-status" id="settings-status" data-state="idle">
+            <i></i>
+            <span id="settings-status-text">未配置代理</span>
+          </div>
+          <label class="field">
+            <span>Worker 地址</span>
+            <input id="proxy-url-input" type="url" inputmode="url" placeholder="https://necktalk-proxy.xxx.workers.dev" autocomplete="off" spellcheck="false" />
+          </label>
+          <label class="toggle-row">
+            <input id="polish-toggle" type="checkbox" checked />
+            <span>使用 DeepSeek 润色译文</span>
+          </label>
+          <div class="settings-actions">
+            <button type="button" class="settings-btn secondary" id="proxy-test">测试连接</button>
+            <button type="button" class="settings-btn primary" id="proxy-save">保存</button>
+            <button type="button" class="settings-btn quiet" id="proxy-clear">清除</button>
+          </div>
+          <div class="settings-help">
+            <p>Worker 需配置 <code>GROQ_API_KEY</code>（自动识别）和 <code>DEEPSEEK_API_KEY</code>（润色）。密钥只保存在 Worker 服务端，网页不会接触 API Key。</p>
+            <p>这里保存的地址仅对当前浏览器生效。要让所有访客都使用自动识别，请把地址填入 <code>assets/config.js</code> 的 <code>proxyBaseUrl</code> 并重新部署。</p>
+            <p>未配置代理时，会自动回退到浏览器语音识别，并需要手动切换「说话语言」。</p>
+            <a href="https://github.com/232yhzhang/necktalk#自建代理" target="_blank" rel="noopener">查看 Worker 部署说明</a>
+          </div>
+        </div>
+      </section>
 
       <div class="loader" id="loader" hidden>
         <div class="loader-mark">N</div>
@@ -233,7 +290,7 @@
 
       <div class="hint-pill" id="hint-pill">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" /></svg>
-        <span>把说话的人放进画面，双语字幕会自动跟随颈部</span>
+        <span>说中文或英文都可以，双语字幕会自动跟随颈部</span>
         <button type="button" id="hint-close" aria-label="关闭提示">知道了</button>
       </div>
     </div>
@@ -242,6 +299,7 @@
       <div class="no-script">NeckTalk 需要启用 JavaScript 才能使用。</div>
     </noscript>
 
+    <script src="./assets/config.js"></script>
     <script type="module" src="./assets/app.js"></script>
   </body>
 </html>

@@ -27,6 +27,37 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
+## Groq Speech Recognition
+
+Automatic language detection and transcription are performed by Groq's
+`whisper-large-v3-turbo` model through the project's optional self-hosted
+Cloudflare Worker proxy.
+
+- Service: Groq — <https://groq.com/>
+- API documentation: <https://console.groq.com/docs/>
+- Short audio clips are uploaded by the Worker to Groq for transcription. Usage
+  is subject to Groq's terms, privacy policy, and rate limits. Groq API keys are
+  configured as Worker secrets and are not shipped in the website.
+
+## DeepSeek
+
+DeepSeek is used for optional translation polishing through the same Worker
+proxy.
+
+- Service: DeepSeek — <https://www.deepseek.com/>
+- API documentation: <https://api-docs.deepseek.com/>
+- Recognized text and the draft translation are sent to DeepSeek. Usage is
+  subject to DeepSeek's terms, privacy policy, and account limits. DeepSeek API
+  keys are configured as Worker secrets and are not shipped in the website.
+
+## Cloudflare Workers
+
+The optional proxy runs on Cloudflare Workers. The Worker source is included in
+`worker/`; it is not operated by this project until the user deploys it to their
+own Cloudflare account.
+
+- Platform: <https://workers.cloudflare.com/>
+
 ## Mozhi and DeepL
 
 When the browser's built-in Translator API is unavailable, this project calls
