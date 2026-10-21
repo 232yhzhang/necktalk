@@ -33,7 +33,7 @@
 
 ## 实现方式
 
-- **自动语音识别**：浏览器采集麦克风音频并进行语音活动检测（VAD）；在自然停顿处分段，把短音频片段发送到自建 Worker。Worker 调用 Groq `whisper-large-v3-turbo`，返回转写文本和自动检测到的语言。VAD 会保留少量前置音频，并按静音切句。
+- **自动语音识别**：浏览器采集麦克风音频并进行语音活动检测（VAD）；在自然停顿处分段，把短音频片段发送到自建 Worker。Worker 默认调用 SiliconFlow 的 `FunAudioLLM/SenseVoiceSmall`（中文可访问、支持中英文和自动语言识别），也可以换成任意 OpenAI 兼容的 ASR 服务。VAD 会保留少量前置音频，并按静音切句。
 - **翻译**：根据检测到的语言自动把中文翻成英文，或把英文翻成中文。基础译文由 DeepL（经 Mozhi 社区实例）提供，失败时回退 MyMemory；随后可再调用 Worker 中的 DeepSeek 润色步骤，让译文更自然。
 - **面部与颈部定位**：MediaPipe Face Landmarker 在本地对视频逐帧检测，取得下巴、额头等关键点，在颈部高度生成字幕锚点。模型与 WASM 位于 `assets/vendor/`，画面不上传。
 - **发言人判断**：读取每个面部的 `jawOpen` 值，并与麦克风音量包络做短时相关性计算，结合嘴部动作能量推断当前说话人。字幕气泡按照面部轨迹平滑移动。
@@ -47,8 +47,9 @@
 ### 准备
 
 - 一个 Cloudflare 账号
-- 一个 Groq API Key（用于云端 Whisper 自动识别，Groq 提供免费额度）
+- 一个 SiliconFlow API Key（默认 ASR 服务，国内可访问；注册后可在控制台创建 Key）
 - 一个 DeepSeek API Key（用于译文润色）
+- 如果不用 SiliconFlow，也可以准备 DeepInfra / Groq / OpenAI 等 OpenAI 兼容 ASR 的 Key
 
 ### 部署 Worker
 
@@ -61,8 +62,22 @@ npx wrangler login
 npx wrangler deploy
 
 # 再写入两把服务端密钥（不会出现在网页或仓库里）
-npx wrangler secret put GROQ_API_KEY
+npx wrangler secret put ASR_API_KEY
 npx wrangler secret put DEEPSEEK_API_KEY
+```
+
+`ASR_API_KEY` 填 SiliconFlow 的 API Key。`worker/wrangler.toml` 默认已经配置：
+
+```toml
+ASR_ENDPOINT = "https://api.siliconflow.cn/v1/audio/transcriptions"
+ASR_MODEL = "FunAudioLLM/SenseVoiceSmall"
+```
+
+如果想改用 DeepInfra、Groq 或 OpenAI 等 OpenAI 兼容 ASR，修改上面两项并重新部署，`ASR_API_KEY` 换成对应服务的 Key 即可。例如：
+
+```toml
+ASR_ENDPOINT = "https://api.deepinfra.com/v1/openai/audio/transcriptions"
+ASR_MODEL = "openai/whisper-large-v3-turbo"
 ```
 
 `wrangler deploy` 输出中的 `https://necktalk-proxy.xxx.workers.dev` 就是 Worker 地址。设置 Secret 后立即生效，无需再次部署；如页面仍提示未配置，可以再执行一次 `npx wrangler deploy`。
@@ -100,11 +115,11 @@ window.NECKTALK_CONFIG = {
 
 提交并重新部署页面。页面仍会提供设置入口，方便调试。
 
-> Worker 地址可以公开，但 Groq / DeepSeek 的 Key 绝不能写进网页或仓库。`worker/.dev.vars` 已被忽略。公开 Worker 的调用额度仍可能被滥用，建议关注 Cloudflare、Groq、DeepSeek 的用量与限额。
+> Worker 地址可以公开，但 ASR / DeepSeek 的 Key 绝不能写进网页或仓库。`worker/.dev.vars` 已被忽略。公开 Worker 的调用额度仍可能被滥用，建议关注 Cloudflare、SiliconFlow、DeepSeek 的用量与限额。
 
 ## 已知限制
 
-- **自动识别需要代理和网络**。音频片段会上传到自建 Worker，再发送给 Groq。在线识别通常能在说话人自然停顿后约 1–2 秒返回结果；它不是逐字实时流式识别。
+- **自动识别需要代理和网络**。音频片段会上传到自建 Worker，再发送给 ASR 服务（默认 SiliconFlow SenseVoice）。在线识别通常能在说话人自然停顿后约 1–2 秒返回结果；它不是逐字实时流式识别。SiliconFlow 的 SenseVoice 模型在控制台中标注为免费，但仍受账号额度限制。
 - **没有停顿的连续讲话**会按最长约 10 秒分段，字幕成段出现。建议正常断句。
 - 自动识别与 DeepSeek 润色有第三方额度与速率限制。任一服务不可用时，会退回基础翻译或原文；代理整体不可用时会回退到手动 Web Speech 模式。
 - **一次只运行一种识别模式**。自动模式不提供手动语种切换；如果代理不可用，才显示手动回退的「说话语言」。
@@ -117,9 +132,9 @@ window.NECKTALK_CONFIG = {
 ## 隐私
 
 - 摄像头画面只在本地浏览器中用于人脸追踪，不上传服务器。
-- 自动识别模式下，语音片段会发送到自建 Worker，并由 Worker 转发给 Groq 做转写。浏览器回退模式下，语音由浏览器自带的语音服务处理。
+- 自动识别模式下，语音片段会发送到自建 Worker，并由 Worker 转发给 ASR 服务（默认 SiliconFlow SenseVoice）做转写。浏览器回退模式下，语音由浏览器自带的语音服务处理。
 - 识别出的文字会发送给 DeepL（经由 Mozhi 社区实例）；失败时发送给 MyMemory。开启润色时，原文与基础译文会由 Worker 发送给 DeepSeek。
-- Groq、DeepSeek、Cloudflare、Mozhi、DeepL、MyMemory 各自有其隐私政策与保留规则。
+- SiliconFlow、DeepSeek、Cloudflare、Mozhi、DeepL、MyMemory 各自有其隐私政策与保留规则。
 - 字幕记录仅保存在当前页面内，刷新或关闭页面即丢失；导出文件也只在本地生成。
 - API Key 只保存在 Worker 环境变量中，不会进入网页或 GitHub 仓库。
 
@@ -168,7 +183,8 @@ worker/.dev.vars.example    本地开发密钥示例（真实 .dev.vars 不要�
 ## 第三方组件与服务
 
 - MediaPipe Tasks Vision 与 Face Landmarker 模型（Google，Apache License 2.0）
-- Groq Whisper 自动语音识别（<https://groq.com/>）
+- SiliconFlow SenseVoice 自动语音识别（默认；<https://siliconflow.cn/>）
+- 可选的其他 OpenAI 兼容 ASR：DeepInfra、Groq、OpenAI 等
 - DeepSeek 润色 API（<https://www.deepseek.com/>）
 - DeepL（经由 Mozhi 社区实例）与 MyMemory 翻译
 - Cloudflare Workers 运行时

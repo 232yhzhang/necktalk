@@ -459,14 +459,15 @@ function updateSettingsStatusFromState() {
 
   if (state.proxyHealth) {
     if (state.proxyHealth.asr) {
+      const model = state.proxyHealth.asrModel ? `（${state.proxyHealth.asrModel}）` : "";
       const polish = state.proxyHealth.polish
         ? state.polishEnabled
           ? " · DeepSeek 润色可用"
           : " · DeepSeek 润色已关闭"
         : " · DeepSeek 未配置";
-      setSettingsStatus("ok", `已连接 · 自动识别可用${polish}`);
+      setSettingsStatus("ok", `已连接 · 自动识别可用${model}${polish}`);
     } else {
-      setSettingsStatus("error", "代理已连接，但未配置 GROQ_API_KEY，自动识别不可用");
+      setSettingsStatus("error", "代理已连接，但未配置 ASR_API_KEY，自动识别不可用");
     }
   } else if (state.proxyBaseUrl) {
     setSettingsStatus("idle", "已填写地址，尚未测试连接");
@@ -556,12 +557,13 @@ async function testProxyFromForm() {
 
   try {
     const health = await checkProxy(baseUrl);
+    const model = health.asrModel ? `（${health.asrModel}）` : "";
     if (!health.asr) {
-      setSettingsStatus("error", "连接成功，但 Worker 未配置 GROQ_API_KEY，自动识别不可用");
+      setSettingsStatus("error", "连接成功，但 Worker 未配置 ASR_API_KEY，自动识别不可用");
     } else if (!health.polish) {
-      setSettingsStatus("ok", "自动识别可用 · 未配置 DeepSeek，润色不可用");
+      setSettingsStatus("ok", `自动识别可用${model} · 未配置 DeepSeek，润色不可用`);
     } else {
-      setSettingsStatus("ok", "自动识别与 DeepSeek 润色均可用");
+      setSettingsStatus("ok", `自动识别${model}与 DeepSeek 润色均可用`);
     }
     proxyUrlInput.value = baseUrl;
     showToast("Worker 连接成功。");
@@ -607,14 +609,15 @@ async function saveProxyFromForm() {
     proxyUrlInput.value = baseUrl;
 
     if (!health.asr) {
-      setSettingsStatus("error", "已保存，但 Worker 未配置 GROQ_API_KEY，自动识别不可用");
+      setSettingsStatus("error", "已保存，但 Worker 未配置 ASR_API_KEY，自动识别不可用");
     } else {
+      const model = health.asrModel ? `（${health.asrModel}）` : "";
       const polish = health.polish
         ? state.polishEnabled
           ? " · DeepSeek 润色已启用"
           : " · DeepSeek 润色已关闭"
         : " · DeepSeek 未配置";
-      setSettingsStatus("ok", `已保存 · 自动识别可用${polish}`);
+      setSettingsStatus("ok", `已保存 · 自动识别可用${model}${polish}`);
     }
 
     showToast(
@@ -922,7 +925,7 @@ async function startSession() {
         state.autoCheckFailed = !health.asr;
         autoMode = Boolean(health.asr);
         if (!health.asr) {
-          startupNotice = "自动识别代理未启用 Groq 识别，已回退为手动识别。";
+          startupNotice = "自动识别代理未配置 ASR Key，已回退为手动识别。";
           startupNoticeIsError = true;
         }
       } catch (error) {
@@ -1185,8 +1188,8 @@ function handleCloudError(error) {
       message = "自动识别请求过于频繁，请稍后再试。";
     } else if (/timeout|超时|network|fetch|连接/i.test(raw)) {
       message = "自动识别代理连接失败，请检查 Worker。";
-    } else if (/GROQ|configuration|not configured/i.test(raw)) {
-      message = "Worker 未配置 GROQ_API_KEY，无法自动识别。";
+    } else if (/ASR_API_KEY|GROQ|configuration|not configured/i.test(raw)) {
+      message = "Worker 未配置 ASR_API_KEY，无法自动识别。";
     }
     showToast(message, { error: true, duration: 5200 });
   }

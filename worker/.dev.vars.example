@@ -1,2 +1,2 @@
-GROQ_API_KEY=replace-with-your-groq-api-key
+ASR_API_KEY=replace-with-your-siliconflow-or-other-asr-api-key
 DEEPSEEK_API_KEY=replace-with-your-deepseek-api-key

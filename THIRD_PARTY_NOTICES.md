@@ -27,17 +27,28 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-## Groq Speech Recognition
+## SiliconFlow SenseVoice and Other ASR Providers
 
-Automatic language detection and transcription are performed by Groq's
-`whisper-large-v3-turbo` model through the project's optional self-hosted
-Cloudflare Worker proxy.
+Automatic transcription and language detection are performed through the
+project's optional self-hosted Cloudflare Worker proxy. The default ASR provider
+is SiliconFlow's `FunAudioLLM/SenseVoiceSmall` model.
 
-- Service: Groq — <https://groq.com/>
-- API documentation: <https://console.groq.com/docs/>
-- Short audio clips are uploaded by the Worker to Groq for transcription. Usage
-  is subject to Groq's terms, privacy policy, and rate limits. Groq API keys are
-  configured as Worker secrets and are not shipped in the website.
+- SiliconFlow: <https://siliconflow.cn/>
+- SenseVoice model: <https://siliconflow.cn/models>
+- Short audio clips are uploaded by the Worker to the configured ASR API for
+  transcription. Usage is subject to that provider's terms, privacy policy, and
+  quota limits. ASR API keys are configured as Worker secrets and are not
+  shipped in the website.
+
+The Worker also supports other OpenAI-compatible ASR endpoints. Optional
+examples include:
+
+- DeepInfra: <https://deepinfra.com/> (`openai/whisper-large-v3-turbo`)
+- Groq: <https://groq.com/> (`whisper-large-v3-turbo`)
+- OpenAI: <https://openai.com/> (`whisper-1`)
+
+The operator is responsible for checking each provider's terms and data
+handling policies.
 
 ## DeepSeek
 

@@ -6,13 +6,25 @@ const DEFAULT_ORIGINS = [
 ];
 
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions";
+const SILICONFLOW_ENDPOINT = "https://api.siliconflow.cn/v1/audio/transcriptions";
 const DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
 const DEFAULT_GROQ_MODEL = "whisper-large-v3-turbo";
+const DEFAULT_SILICONFLOW_MODEL = "FunAudioLLM/SenseVoiceSmall";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
 const LANGUAGE_NAMES = {
   "zh-CN": "Simplified Chinese",
   "en-US": "English",
 };
+
+function resolveAsr(env) {
+  const groqOnly = !env.ASR_API_KEY && !env.ASR_ENDPOINT && Boolean(env.GROQ_API_KEY);
+  const endpoint = env.ASR_ENDPOINT || (groqOnly ? GROQ_ENDPOINT : SILICONFLOW_ENDPOINT);
+  const apiKey = env.ASR_API_KEY || env.GROQ_API_KEY || "";
+  const model =
+    env.ASR_MODEL ||
+    (endpoint === GROQ_ENDPOINT ? DEFAULT_GROQ_MODEL : DEFAULT_SILICONFLOW_MODEL);
+  return { endpoint, apiKey, model };
+}
 
 function getOrigins(env) {
   const configured = String(env.ALLOWED_ORIGINS || "")
@@ -64,12 +76,13 @@ function cleanTranslation(value) {
 }
 
 async function handleHealth(origin, env) {
+  const asr = resolveAsr(env);
   return jsonResponse(
     {
       ok: true,
-      asr: Boolean(env.GROQ_API_KEY),
+      asr: Boolean(asr.apiKey),
+      asrModel: asr.model,
       polish: Boolean(env.DEEPSEEK_API_KEY),
-      groqModel: env.GROQ_MODEL || DEFAULT_GROQ_MODEL,
       deepseekModel: env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL,
     },
     200,
@@ -79,8 +92,9 @@ async function handleHealth(origin, env) {
 }
 
 async function handleTranscribe(request, origin, env) {
-  if (!env.GROQ_API_KEY) {
-    return errorResponse("GROQ_API_KEY is not configured", 503, origin, env);
+  const asr = resolveAsr(env);
+  if (!asr.apiKey) {
+    return errorResponse("ASR_API_KEY is not configured", 503, origin, env);
   }
 
   let clientForm;
@@ -101,15 +115,14 @@ async function handleTranscribe(request, origin, env) {
 
   const form = new FormData();
   form.append("file", file, "audio.wav");
-  form.append("model", env.GROQ_MODEL || DEFAULT_GROQ_MODEL);
-  form.append("response_format", "verbose_json");
+  form.append("model", asr.model);
 
   let upstream;
   try {
-    upstream = await fetch(GROQ_ENDPOINT, {
+    upstream = await fetch(asr.endpoint, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${env.GROQ_API_KEY}`,
+        Authorization: `Bearer ${asr.apiKey}`,
       },
       body: form,
     });

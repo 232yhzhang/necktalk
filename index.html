@@ -247,7 +247,7 @@
         </header>
         <div class="settings-body">
           <p class="settings-intro">
-            通过你自己的 Cloudflare Worker 代理连接云端自动语音识别（Groq Whisper）与 DeepSeek 润色。配置后无需再手动选择说话语言。
+            通过你自己的 Cloudflare Worker 代理连接云端自动语音识别（SiliconFlow SenseVoice / Whisper 等）与 DeepSeek 润色。配置后无需再手动选择说话语言。
           </p>
           <div class="settings-status" id="settings-status" data-state="idle">
             <i></i>
@@ -267,7 +267,7 @@
             <button type="button" class="settings-btn quiet" id="proxy-clear">清除</button>
           </div>
           <div class="settings-help">
-            <p>Worker 需配置 <code>GROQ_API_KEY</code>（自动识别）和 <code>DEEPSEEK_API_KEY</code>（润色）。密钥只保存在 Worker 服务端，网页不会接触 API Key。</p>
+            <p>Worker 需配置 <code>ASR_API_KEY</code>（默认接入 SiliconFlow SenseVoice，也可换其他 OpenAI 兼容 ASR）和 <code>DEEPSEEK_API_KEY</code>（润色）。密钥只保存在 Worker 服务端，网页不会接触 API Key。</p>
             <p>这里保存的地址仅对当前浏览器生效。要让所有访客都使用自动识别，请把地址填入 <code>assets/config.js</code> 的 <code>proxyBaseUrl</code> 并重新部署。</p>
             <p>未配置代理时，会自动回退到浏览器语音识别，并需要手动切换「说话语言」。</p>
             <a href="https://github.com/232yhzhang/necktalk#自建代理" target="_blank" rel="noopener">查看 Worker 部署说明</a>

@@ -5,9 +5,19 @@ compatibility_date = "2026-10-21"
 [vars]
 ALLOWED_ORIGINS = "https://232yhzhang.github.io,http://localhost:4173,http://127.0.0.1:4173,http://localhost:8787"
 
+# Default ASR: SiliconFlow SenseVoice (accessible from mainland China).
+# Other OpenAI-compatible ASR endpoints can be used by overriding these.
+ASR_ENDPOINT = "https://api.siliconflow.cn/v1/audio/transcriptions"
+ASR_MODEL = "FunAudioLLM/SenseVoiceSmall"
+
+# Alternative examples:
+# ASR_ENDPOINT = "https://api.deepinfra.com/v1/openai/audio/transcriptions"
+# ASR_MODEL = "openai/whisper-large-v3-turbo"
+# ASR_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions"
+# ASR_MODEL = "whisper-large-v3-turbo"
+# ASR_ENDPOINT = "https://api.openai.com/v1/audio/transcriptions"
+# ASR_MODEL = "whisper-1"
+
 # Set these with:
-#   npx wrangler secret put GROQ_API_KEY
+#   npx wrangler secret put ASR_API_KEY
 #   npx wrangler secret put DEEPSEEK_API_KEY
-# Optional model overrides:
-# GROQ_MODEL = "whisper-large-v3-turbo"
-# DEEPSEEK_MODEL = "deepseek-chat"
