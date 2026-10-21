@@ -2189,7 +2189,7 @@ function scheduleEntryTranslation(entry) {
 
   if (!entry.translationTimer) {
     entry.translationStatus = entry.translation ? "updating" : "pending";
-    const wait = entry.translation ? 550 : 320;
+    const wait = entry.translation ? 400 : 180;
     entry.translationTimer = window.setTimeout(() => {
       entry.translationTimer = null;
       runEntryTranslation(entry);
@@ -2324,7 +2324,7 @@ function scheduleEntryPolish(entry) {
   entry.polishTimer = window.setTimeout(() => {
     entry.polishTimer = null;
     runEntryPolish(entry);
-  }, 380);
+  }, 220);
   refreshEntryTranslationUI(entry);
 }
 

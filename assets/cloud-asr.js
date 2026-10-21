@@ -2,8 +2,8 @@ const TARGET_RATE = 16000;
 const BLOCK_SIZE = 4096;
 const PRE_ROLL_SECONDS = 0.35;
 const MIN_SPEECH_SECONDS = 0.35;
-const SILENCE_END_SECONDS = 0.9;
-const MAX_UTTERANCE_SECONDS = 10;
+const SILENCE_END_SECONDS = 0.55;
+const MAX_UTTERANCE_SECONDS = 6;
 
 function rmsOf(samples) {
   let sum = 0;
