@@ -27,7 +27,23 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
+## MyMemory Translation API
+
+When the browser's built-in Translator API is unavailable, this project uses
+the free MyMemory translation API for online translation.
+
+- Service: MyMemory — <https://mymemory.translated.net/>
+- API documentation: <https://mymemory.translated.net/doc/spec.php>
+- Usage is subject to MyMemory's terms and quota limits. Recognized text is sent
+  to the service to be translated.
+
 ## Web Speech API
 
 Speech recognition is delegated to the browser's built-in Web Speech API.
 No speech service is bundled with this project.
+
+## Chromium Translator API
+
+If the browser exposes an available built-in `Translator` language pack, the
+project uses it for local translation. The language pack is provided by the
+browser and is not bundled with this project.

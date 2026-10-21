@@ -1,5 +1,10 @@
 import { FaceTracker } from "./face-tracker.js";
 import { RecognitionController } from "./recognition.js";
+import {
+  TranslationService,
+  pairFor,
+  translationErrorMessage,
+} from "./translate.js";
 
 const SPEAKER_COLORS = ["#ffb86b", "#7ce7c0", "#b49cff", "#6fc3ff", "#ff8fa3", "#e6db79"];
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -11,9 +16,7 @@ const DETECT_INTERVAL = 70;
 const BUBBLE_LIFETIME = 7000;
 const DRAFT_LIFETIME = 5000;
 const MERGE_WINDOW = 5000;
-const MAX_ENTRY_LENGTH = 540;
-const FINAL_TAIL = { "zh-CN": 58, "en-US": 160 };
-const DRAFT_TAIL = { "zh-CN": 30, "en-US": 76 };
+const MAX_ENTRY_LENGTH = 470;
 
 const SPEECH_MESSAGES = {
   "not-allowed": "麦克风权限被拒绝，请在地址栏的网站设置中允许麦克风后重试。",
@@ -120,6 +123,9 @@ const state = {
   startedAt: 0,
   transcript: [],
   entrySeq: 0,
+  sessionId: 0,
+  translationService: new TranslationService(),
+  lastTranslationNoticeAt: 0,
   bubbleZ: 10,
   lastFinalText: "",
   lastFinalAt: 0,
@@ -174,16 +180,27 @@ function joinSpeechText(left, right) {
   return `${a} ${b}`;
 }
 
-function truncateTail(text, limit) {
+function truncateTail(text, limit, lang = state.lang) {
   const clean = String(text || "").trim();
   if (clean.length <= limit) return clean;
 
   let tail = clean.slice(clean.length - limit);
-  if (state.lang === "en-US") {
+  if (lang === "en-US") {
     const boundary = tail.indexOf(" ");
     if (boundary > 0 && boundary < 18) tail = tail.slice(boundary + 1);
+  } else {
+    const boundary = tail.slice(0, 16).search(/[，。！？；：、,.!?;:]/);
+    if (boundary >= 0 && boundary < 12) tail = tail.slice(boundary + 1);
   }
-  return `… ${tail}`;
+  return `… ${tail.trimStart()}`;
+}
+
+function bubbleTextLimits(sourceLang, targetLang) {
+  const compact = window.innerWidth <= 720;
+  const source = sourceLang === "zh-CN" ? (compact ? 28 : 56) : compact ? 80 : 170;
+  const draft = sourceLang === "zh-CN" ? (compact ? 18 : 32) : compact ? 50 : 90;
+  const translation = targetLang === "zh-CN" ? (compact ? 30 : 54) : compact ? 85 : 180;
+  return { source, draft, translation };
 }
 
 function formatClock(ms) {
@@ -234,9 +251,9 @@ function setStartBusy(busy) {
   if (busy) {
     startBtnText.textContent = "正在准备…";
   } else if (!state.live && state.transcript.length > 0) {
-    startBtnText.textContent = "重新开始字幕";
+    startBtnText.textContent = "重新开始翻译";
   } else if (!state.live) {
-    startBtnText.textContent = "开启摄像头 · 开始字幕";
+    startBtnText.textContent = "开启摄像头 · 开始翻译";
   }
 }
 
@@ -320,7 +337,8 @@ function setLanguage(lang, announce = true) {
     updateDockSubtitle();
     updateSpeechUI();
     if (announce) {
-      showToast(`已切换为 ${LANGUAGES[lang].name} 识别`);
+      const pair = pairFor(lang);
+      showToast(`已切换：${pair.sourceLabel} → ${pair.targetLabel}`);
     }
   }
 }
@@ -492,9 +510,17 @@ function cleanupForExit() {
 }
 
 function resetSession() {
+  state.sessionId += 1;
+  for (const entry of state.transcript) {
+    if (entry.translationTimer) {
+      window.clearTimeout(entry.translationTimer);
+      entry.translationTimer = null;
+    }
+  }
   state.transcript = [];
   state.entrySeq = 0;
   state.speakerSeq = 0;
+  state.lastTranslationNoticeAt = 0;
   state.speakerByKey.clear();
   state.speakers.clear();
   state.fallbackSpeaker = null;
@@ -579,7 +605,7 @@ async function startSession() {
       await delay(420);
     }
 
-    setLoader(74, "正在准备实时字幕…");
+    setLoader(74, "正在准备实时翻译…");
     resetSession();
     closePanel();
 
@@ -605,7 +631,7 @@ async function startSession() {
     setStartBusy(false);
     updateSpeechUI();
     updateDockSubtitle();
-    setLoader(100, "字幕已就绪");
+    setLoader(100, "双语字幕已就绪");
     hideLoader(100);
     scheduleHint();
 
@@ -674,11 +700,11 @@ function stopSession(manual = true) {
 
   if (manual) {
     if (state.transcript.length > 0) {
-      showToast("字幕已结束，记录可在右上角导出。");
-      startBtnText.textContent = "重新开始字幕";
+      showToast("双语字幕已结束，记录可在右上角导出。");
+      startBtnText.textContent = "重新开始翻译";
     } else {
-      showToast("字幕已结束。");
-      startBtnText.textContent = "开启摄像头 · 开始字幕";
+      showToast("双语字幕已结束。");
+      startBtnText.textContent = "开启摄像头 · 开始翻译";
     }
     setStartBusy(false);
     window.setTimeout(() => startBtn.focus({ preventScroll: true }), 300);
@@ -827,12 +853,14 @@ function handleFinalText(text, now) {
     entry.updatedAt = now;
     speaker.entryUpdatedAt = now;
     updateEntryDom(entry);
+    scheduleEntryTranslation(entry);
   } else {
     const created = createEntry(speaker, text, now);
     speaker.entry = created;
     speaker.entryUpdatedAt = now;
     pushTranscriptEntry(created);
     appendEntryDom(created);
+    scheduleEntryTranslation(created);
   }
 
   renderSpeaker(speaker, now);
@@ -945,32 +973,84 @@ function ensureBubble(speaker) {
   element.className = "subtitle";
   element.style.setProperty("--speaker", speaker.color);
 
+  const head = document.createElement("div");
+  head.className = "subtitle-head";
+
   const name = document.createElement("div");
   name.className = "subtitle-name";
   name.textContent = speaker.name;
 
-  const text = document.createElement("div");
-  text.className = "subtitle-text";
-  text.dir = "auto";
+  const pair = document.createElement("span");
+  pair.className = "subtitle-pair";
+  pair.setAttribute("aria-hidden", "true");
 
-  element.append(name, text);
+  head.append(name, pair);
+
+  const sourceLine = document.createElement("div");
+  sourceLine.className = "subtitle-line subtitle-source";
+
+  const sourceTag = document.createElement("span");
+  sourceTag.className = "line-tag";
+  sourceTag.setAttribute("aria-hidden", "true");
+
+  const sourceText = document.createElement("span");
+  sourceText.className = "line-text source-text";
+  sourceText.dir = "auto";
+
+  sourceLine.append(sourceTag, sourceText);
+
+  const targetLine = document.createElement("div");
+  targetLine.className = "subtitle-line subtitle-target";
+
+  const targetTag = document.createElement("span");
+  targetTag.className = "line-tag target-tag";
+  targetTag.setAttribute("aria-hidden", "true");
+
+  const targetBody = document.createElement("span");
+  targetBody.className = "line-body";
+
+  const targetText = document.createElement("span");
+  targetText.className = "line-text target-text";
+  targetText.dir = "auto";
+
+  const targetState = document.createElement("span");
+  targetState.className = "translation-state";
+
+  targetBody.append(targetText, targetState);
+  targetLine.append(targetTag, targetBody);
+
+  element.append(head, sourceLine, targetLine);
   stage.append(element);
 
   speaker.el = element;
   speaker.nameEl = name;
-  speaker.textEl = text;
+  speaker.pairEl = pair;
+  speaker.sourceLineEl = sourceLine;
+  speaker.sourceTagEl = sourceTag;
+  speaker.sourceTextEl = sourceText;
+  speaker.targetLineEl = targetLine;
+  speaker.targetTagEl = targetTag;
+  speaker.targetTextEl = targetText;
+  speaker.targetStateEl = targetState;
 }
 
 function renderSpeaker(speaker, now = performance.now()) {
   ensureBubble(speaker);
 
+  const entry = speaker.entry;
   const hasDraft = state.draft.speakerKey === speaker.key && Boolean(state.draft.text);
-  const finalSource = speaker.entry ? speaker.entry.text : "";
-  const finalText = finalSource
-    ? truncateTail(finalSource, FINAL_TAIL[state.lang] || FINAL_TAIL["zh-CN"])
-    : "";
+  const pair = entry
+    ? {
+        sourceLang: entry.sourceLang,
+        targetLang: entry.targetLang,
+        sourceTag: entry.sourceTag,
+        targetTag: entry.targetTag,
+      }
+    : pairFor(state.lang);
+  const limits = bubbleTextLimits(pair.sourceLang, pair.targetLang);
+  const finalText = entry ? truncateTail(entry.text, limits.source, pair.sourceLang) : "";
   const draftText = hasDraft
-    ? truncateTail(state.draft.text, DRAFT_TAIL[state.lang] || DRAFT_TAIL["zh-CN"])
+    ? truncateTail(state.draft.text, limits.draft, pair.sourceLang)
     : "";
 
   if (!finalText && !draftText) {
@@ -978,28 +1058,61 @@ function renderSpeaker(speaker, now = performance.now()) {
     return;
   }
 
+  speaker.pairEl.textContent = `${pair.sourceTag} → ${pair.targetTag}`;
+  speaker.sourceTagEl.textContent = pair.sourceTag;
+  speaker.targetTagEl.textContent = pair.targetTag;
+  speaker.sourceTextEl.lang = pair.sourceLang;
+  speaker.targetTextEl.lang = pair.targetLang;
+
+  let translationText = "";
+  let translationState = "";
+  let translationClass = "";
+
+  if (entry && entry.translation) {
+    translationText = truncateTail(entry.translation, limits.translation, pair.targetLang);
+    if (entry.translationStatus === "updating" || entry.translationStatus === "pending") {
+      translationState = "更新中";
+      translationClass = "is-updating";
+    } else if (entry.translationStatus === "error") {
+      translationState = "更新失败";
+      translationClass = "is-error";
+    }
+  } else if (entry && entry.translationStatus === "error") {
+    translationText = "翻译暂不可用";
+    translationClass = "is-error";
+  } else {
+    translationState = "翻译中…";
+    translationClass = "is-pending";
+  }
+
+  speaker.targetLineEl.classList.toggle("is-pending", translationClass === "is-pending");
+  speaker.targetLineEl.classList.toggle("is-updating", translationClass === "is-updating");
+  speaker.targetLineEl.classList.toggle("is-error", translationClass === "is-error");
+  speaker.targetTextEl.textContent = translationText;
+  speaker.targetStateEl.textContent = translationState;
+
   const wasHidden = !speaker.el.classList.contains("is-visible");
   if (wasHidden) speaker.hasPosition = false;
 
-  speaker.textEl.replaceChildren();
+  speaker.sourceTextEl.replaceChildren();
 
   if (finalText) {
     const finalSpan = document.createElement("span");
     finalSpan.className = "final";
     finalSpan.textContent = finalText;
-    speaker.textEl.append(finalSpan);
+    speaker.sourceTextEl.append(finalSpan);
   }
 
   if (draftText) {
     const interimSpan = document.createElement("span");
     interimSpan.className = "interim";
     interimSpan.textContent = draftText;
-    speaker.textEl.append(interimSpan);
+    speaker.sourceTextEl.append(interimSpan);
 
     const caret = document.createElement("span");
     caret.className = "caret";
     caret.setAttribute("aria-hidden", "true");
-    speaker.textEl.append(caret);
+    speaker.sourceTextEl.append(caret);
   }
 
   speaker.updatedAt = now;
@@ -1162,17 +1275,33 @@ function updateBubbles(now) {
 
 function createEntry(speaker, text, now) {
   state.entrySeq += 1;
+  const pair = pairFor(state.lang);
   return {
     id: state.entrySeq,
     speakerKey: speaker.key,
     speakerName: speaker.name,
     color: speaker.color,
     text,
+    sourceLang: pair.sourceLang,
+    targetLang: pair.targetLang,
+    sourceTag: pair.sourceTag,
+    targetTag: pair.targetTag,
+    translation: "",
+    translationStatus: "pending",
+    translationError: "",
+    translationTimer: null,
+    translationInFlight: false,
+    translationDirty: false,
+    sessionId: state.sessionId,
     t0: Math.max(0, now - state.startedAt),
     t1: Math.max(0, now - state.startedAt),
     updatedAt: now,
     el: null,
-    elText: null,
+    elSourceText: null,
+    elTranslationText: null,
+    elTranslationState: null,
+    elTranslation: null,
+    elPair: null,
     elTime: null,
   };
 }
@@ -1189,27 +1318,211 @@ function appendEntryDom(entry) {
   speaker.className = "entry-speaker";
   speaker.textContent = entry.speakerName;
 
+  const meta = document.createElement("span");
+  meta.className = "entry-meta";
+
+  const pair = document.createElement("span");
+  pair.className = "entry-pair";
+  pair.textContent = `${entry.sourceTag} → ${entry.targetTag}`;
+
   const time = document.createElement("span");
   time.className = "entry-time";
   time.textContent = formatClock(entry.t0);
 
-  const text = document.createElement("p");
-  text.dir = "auto";
-  text.textContent = entry.text;
+  meta.append(pair, time);
+  top.append(speaker, meta);
 
-  top.append(speaker, time);
-  item.append(top, text);
+  const source = document.createElement("p");
+  source.className = "entry-line entry-source";
+
+  const sourceTag = document.createElement("span");
+  sourceTag.className = "entry-lang";
+  sourceTag.textContent = entry.sourceTag;
+  sourceTag.setAttribute("aria-hidden", "true");
+
+  const sourceText = document.createElement("span");
+  sourceText.className = "entry-text";
+  sourceText.lang = entry.sourceLang;
+  sourceText.dir = "auto";
+
+  source.append(sourceTag, sourceText);
+
+  const target = document.createElement("p");
+  target.className = "entry-line entry-translation";
+
+  const targetTag = document.createElement("span");
+  targetTag.className = "entry-lang target-lang";
+  targetTag.textContent = entry.targetTag;
+  targetTag.setAttribute("aria-hidden", "true");
+
+  const targetBody = document.createElement("span");
+  targetBody.className = "entry-body";
+
+  const targetText = document.createElement("span");
+  targetText.className = "entry-text translation-text";
+  targetText.lang = entry.targetLang;
+  targetText.dir = "auto";
+
+  const targetState = document.createElement("span");
+  targetState.className = "entry-state";
+
+  targetBody.append(targetText, targetState);
+  target.append(targetTag, targetBody);
+
+  item.append(top, source, target);
   entryList.append(item);
 
   entry.el = item;
-  entry.elText = text;
+  entry.elSourceText = sourceText;
+  entry.elTranslationText = targetText;
+  entry.elTranslationState = targetState;
+  entry.elTranslation = target;
+  entry.elPair = pair;
   entry.elTime = time;
+
+  updateEntryDom(entry);
 }
 
 function updateEntryDom(entry) {
   if (!entry.el) return;
-  entry.elText.textContent = entry.text;
+
   entry.elTime.textContent = formatClock(entry.t0);
+  entry.elPair.textContent = `${entry.sourceTag} → ${entry.targetTag}`;
+  entry.elSourceText.textContent = entry.text;
+
+  let translationText = "";
+  let stateText = "";
+  const status = entry.translationStatus;
+
+  if (entry.translation) {
+    translationText = entry.translation;
+    if (status === "updating" || status === "pending") {
+      stateText = "更新中…";
+    } else if (status === "error") {
+      stateText = "更新失败";
+    }
+  } else if (status === "error") {
+    translationText = entry.translationError || "翻译暂不可用";
+  } else {
+    stateText = "翻译中…";
+  }
+
+  entry.elTranslationText.textContent = translationText;
+  entry.elTranslationState.textContent = stateText;
+  entry.elTranslation.classList.toggle("is-pending", !translationText && status !== "error");
+  entry.elTranslation.classList.toggle(
+    "is-updating",
+    status === "updating" || (Boolean(entry.translation) && status === "pending"),
+  );
+  entry.elTranslation.classList.toggle("is-error", status === "error");
+  entry.elTranslation.title = entry.translationError || "";
+}
+
+function isEntryCurrent(entry) {
+  return Boolean(
+    entry && entry.sessionId === state.sessionId && state.transcript.includes(entry),
+  );
+}
+
+function refreshEntryTranslationUI(entry) {
+  if (!isEntryCurrent(entry)) return;
+  updateEntryDom(entry);
+
+  if (!state.live) return;
+  const speaker = state.speakerByKey.get(entry.speakerKey);
+  if (
+    speaker &&
+    speaker.entry === entry &&
+    speaker.el &&
+    speaker.el.classList.contains("is-visible")
+  ) {
+    renderSpeaker(speaker);
+  }
+}
+
+function scheduleEntryTranslation(entry) {
+  if (!isEntryCurrent(entry)) return;
+
+  entry.translationDirty = true;
+
+  if (entry.translationInFlight) {
+    entry.translationStatus = entry.translation ? "updating" : "pending";
+    refreshEntryTranslationUI(entry);
+    return;
+  }
+
+  if (!entry.translationTimer) {
+    entry.translationStatus = entry.translation ? "updating" : "pending";
+    const wait = entry.translation ? 550 : 320;
+    entry.translationTimer = window.setTimeout(() => {
+      entry.translationTimer = null;
+      runEntryTranslation(entry);
+    }, wait);
+  }
+
+  refreshEntryTranslationUI(entry);
+}
+
+async function runEntryTranslation(entry) {
+  if (!isEntryCurrent(entry) || entry.translationInFlight) return;
+
+  const requestText = entry.text;
+  entry.translationInFlight = true;
+  entry.translationDirty = false;
+  entry.translationStatus = entry.translation ? "updating" : "pending";
+  refreshEntryTranslationUI(entry);
+
+  try {
+    const translated = await state.translationService.translate(requestText, entry.sourceLang);
+    if (!isEntryCurrent(entry)) return;
+
+    if (entry.text === requestText) {
+      entry.translation = translated;
+      entry.translationError = "";
+      entry.translationStatus = "done";
+    } else {
+      entry.translationDirty = true;
+    }
+  } catch (error) {
+    if (!isEntryCurrent(entry)) return;
+
+    if (entry.text === requestText) {
+      entry.translationStatus = "error";
+      entry.translationError = translationErrorMessage(error);
+      notifyTranslationIssue(error);
+    } else {
+      entry.translationDirty = true;
+    }
+  } finally {
+    entry.translationInFlight = false;
+    if (!isEntryCurrent(entry)) return;
+
+    refreshEntryTranslationUI(entry);
+
+    if (entry.translationDirty) {
+      scheduleEntryTranslation(entry);
+    }
+  }
+}
+
+function notifyTranslationIssue(error) {
+  if (!state.live) return;
+  if (error?.code === "too-long") return;
+
+  const now = performance.now();
+  if (state.lastTranslationNoticeAt && now - state.lastTranslationNoticeAt < 15000) {
+    return;
+  }
+  state.lastTranslationNoticeAt = now;
+
+  let message = "翻译服务暂不可用，字幕将只显示原文。";
+  if (error?.code === "quota" || error?.code === "rate-limit") {
+    message = "翻译服务额度已用完，字幕将只显示原文。";
+  } else if (error?.code === "network") {
+    message = "翻译服务连接失败，字幕将暂不显示译文。";
+  }
+
+  showToast(message, { error: true, duration: 5600 });
 }
 
 function updateTranscriptCount() {
@@ -1257,8 +1570,18 @@ function closePanel() {
 
 function buildPlainText() {
   return state.transcript
-    .map((entry) => `[${formatClock(entry.t0)}] ${entry.speakerName}：${entry.text}`)
-    .join("\n");
+    .map((entry) => {
+      const pair = `${entry.sourceTag} → ${entry.targetTag}`;
+      const translation =
+        entry.translation ||
+        (entry.translationStatus === "error"
+          ? entry.translationError || "翻译暂不可用"
+          : "（翻译中）");
+      return `[${formatClock(entry.t0)}] ${entry.speakerName}（${pair}）\n${
+        entry.sourceTag
+      }：${entry.text}\n${entry.targetTag}：${translation}`;
+    })
+    .join("\n\n");
 }
 
 function buildSrt() {
@@ -1266,9 +1589,14 @@ function buildSrt() {
     .map((entry, index) => {
       const start = entry.t0;
       const end = Math.max(entry.t1 + 700, entry.t0 + 1100);
+      const translation =
+        entry.translation ||
+        (entry.translationStatus === "error"
+          ? entry.translationError || "翻译暂不可用"
+          : "（翻译中）");
       return `${index + 1}\n${formatSrtTime(start)} --> ${formatSrtTime(end)}\n${
         entry.speakerName
-      }：${entry.text}\n`;
+      }：${entry.text}\n[${entry.targetTag}] ${translation}\n`;
     })
     .join("\n");
 }
@@ -1283,7 +1611,7 @@ async function copyTranscript() {
 
   try {
     await navigator.clipboard.writeText(text);
-    showToast("字幕记录已复制。");
+    showToast("双语字幕已复制。");
   } catch (error) {
     void error;
     const area = document.createElement("textarea");
@@ -1294,7 +1622,7 @@ async function copyTranscript() {
     area.select();
     try {
       document.execCommand("copy");
-      showToast("字幕记录已复制。");
+      showToast("双语字幕已复制。");
     } catch (copyError) {
       void copyError;
       showToast("复制失败，请手动选择文本。", { error: true });
@@ -1324,7 +1652,7 @@ function downloadSrt() {
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1200);
-  showToast("SRT 字幕已导出。");
+  showToast("双语 SRT 已导出。");
 }
 
 function clearTranscript() {
@@ -1333,6 +1661,13 @@ function clearTranscript() {
     return;
   }
   if (!window.confirm("清空本次字幕记录？")) return;
+
+  for (const entry of state.transcript) {
+    if (entry.translationTimer) {
+      window.clearTimeout(entry.translationTimer);
+      entry.translationTimer = null;
+    }
+  }
 
   state.transcript = [];
   state.entrySeq = 0;
@@ -1535,7 +1870,7 @@ function updateSpeechUI() {
     return;
   }
 
-  let label = "实时识别";
+  let label = "实时翻译";
   let warn = false;
   let title = "正在聆听";
 
@@ -1566,7 +1901,7 @@ function updateSpeechUI() {
 function updateDockSubtitle() {
   if (!state.live) return;
 
-  const language = LANGUAGES[state.lang].name;
+  const pair = pairFor(state.lang);
   let detail = "";
 
   if (state.speechIssue === "fatal") {
@@ -1576,7 +1911,7 @@ function updateDockSubtitle() {
   } else if (state.speechIssue === "audio-capture") {
     detail = "麦克风连接中断";
   } else if (state.speechIssue === "language") {
-    detail = "请切换识别语言";
+    detail = "请切换说话语言";
   } else if (!state.trackerReady) {
     detail = "人脸追踪不可用 · 字幕显示在底部";
   } else if (state.faceCount > 0) {
@@ -1585,7 +1920,7 @@ function updateDockSubtitle() {
     detail = "未检测到人脸 · 字幕移到画面底部";
   }
 
-  dockSub.textContent = `${language} 识别 · ${detail}`;
+  dockSub.textContent = `${pair.sourceLabel} → ${pair.targetLabel} · ${detail}`;
 }
 
 function loop() {
