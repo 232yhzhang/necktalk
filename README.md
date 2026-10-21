@@ -56,10 +56,16 @@
 cd worker
 npm install
 npx wrangler login
+
+# 先创建 Worker
+npx wrangler deploy
+
+# 再写入两把服务端密钥（不会出现在网页或仓库里）
 npx wrangler secret put GROQ_API_KEY
 npx wrangler secret put DEEPSEEK_API_KEY
-npx wrangler deploy
 ```
+
+`wrangler deploy` 输出中的 `https://necktalk-proxy.xxx.workers.dev` 就是 Worker 地址。设置 Secret 后立即生效，无需再次部署；如页面仍提示未配置，可以再执行一次 `npx wrangler deploy`。
 
 部署前请修改 `worker/wrangler.toml` 中的 `ALLOWED_ORIGINS`，至少包含：
 
