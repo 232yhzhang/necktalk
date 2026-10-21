@@ -58,7 +58,7 @@
             <button type="button" class="lang-btn" data-lang="en-US" aria-pressed="false" title="Speak English, translate into Chinese">EN</button>
           </div>
 
-          <button type="button" class="icon-btn" id="settings-btn" aria-label="自动识别与润色设置" aria-expanded="false" title="自动识别与润色设置">
+          <button type="button" class="icon-btn" id="settings-btn" aria-label="自动识别与优化设置" aria-expanded="false" title="自动识别与优化设置">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7V20a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.8v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2Z" />
               <circle cx="12" cy="12" r="3" />
@@ -108,7 +108,7 @@
               <span class="start-btn-spinner" aria-hidden="true"></span>
             </button>
             <p class="permission-note">
-              需要摄像头与麦克风 · 自动识别与润色需联网<br />
+              需要摄像头与麦克风 · 自动识别与优化需联网<br />
               API Key 只保存在本机浏览器 · 推荐桌面版 Chrome / Edge
             </p>
           </div>
@@ -125,7 +125,7 @@
             <li><i class="chip-dot chip-dot-a"></i>自动识别中 / 英</li>
             <li><i class="chip-dot chip-dot-b"></i>实时互译</li>
             <li><i class="chip-dot chip-dot-c"></i>发言人识别</li>
-            <li><i class="chip-dot chip-dot-d"></i>DeepSeek 直译</li>
+            <li><i class="chip-dot chip-dot-d"></i>DeepSeek 优化</li>
           </ul>
         </section>
 
@@ -239,7 +239,7 @@
         <header class="settings-head">
           <div>
             <p class="panel-kicker">AUTO MODE</p>
-            <h2 id="settings-title">自动识别与润色</h2>
+            <h2 id="settings-title">自动识别与优化</h2>
           </div>
           <button type="button" class="icon-btn" id="settings-close" aria-label="关闭设置">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
@@ -260,7 +260,7 @@
               <h3>浏览器直连</h3>
             </div>
             <p class="settings-note">
-              SiliconFlow 负责自动语音识别，DeepSeek 负责译文润色。Key 只保存在当前浏览器。
+              SiliconFlow 负责自动语音识别，DeepSeek 负责优化译文。Key 只保存在当前浏览器。
               <a href="https://cloud.siliconflow.cn/" target="_blank" rel="noopener">创建 SiliconFlow Key</a>
               ·
               <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">创建 DeepSeek Key</a>
@@ -270,18 +270,18 @@
               <input id="sf-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-..." />
             </label>
             <label class="field">
-              <span>DeepSeek API Key（可选，用于润色）</span>
+              <span>DeepSeek API Key（可选，用于优化译文）</span>
               <input id="ds-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-..." />
             </label>
             <label class="toggle-row">
               <input id="polish-toggle" type="checkbox" checked />
-              <span>使用 DeepSeek 直译（单次请求，跳过基础翻译）</span>
+              <span>使用 DeepSeek 优化译文（基础翻译先显示，随后更新）</span>
             </label>
             <div class="settings-actions">
               <button type="button" class="settings-btn primary" id="direct-save">保存并启用</button>
               <button type="button" class="settings-btn quiet" id="direct-clear">清除密钥</button>
             </div>
-            <p class="settings-note">开启 DeepSeek 直译时只发一次翻译请求；关闭后使用 DeepL/MyMemory 基础翻译。若直译失败会自动回退基础翻译。</p>
+            <p class="settings-note">开启 DeepSeek 后，基础翻译会先显示，DeepSeek 在后台替换为更自然的译文；关闭后只用基础翻译。DeepSeek 不可用时会保留基础翻译。</p>
             <p class="settings-warning">Key 仅存储在这台设备的浏览器中；共享页面时，其他访客需要填写自己的 Key。不要在公用电脑保存。</p>
           </section>
 

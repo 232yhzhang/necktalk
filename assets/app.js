@@ -485,8 +485,8 @@ function updateSettingsStatusFromState() {
   if (state.directSiliconKey) {
     const translation = state.directDeepseekKey
       ? state.polishEnabled
-        ? " · DeepSeek 直译已启用"
-        : " · DeepSeek 直译已关闭（使用基础翻译）"
+        ? " · DeepSeek 优化已启用"
+        : " · DeepSeek 优化已关闭（使用基础翻译）"
       : " · 未配置 DeepSeek，使用基础翻译";
     setSettingsStatus(
       "ok",
@@ -2272,29 +2272,67 @@ async function runEntryTranslation(entry) {
     let provider = "base";
 
     if (state.directDeepseekKey && state.polishEnabled) {
+      let baseResult = "";
+      let baseError = null;
+      let deepSeekShown = false;
+
+      const basePromise = state.translationService
+        .translate(requestText, entry.sourceLang)
+        .then((value) => {
+          baseResult = value;
+          if (
+            value &&
+            !deepSeekShown &&
+            isEntryCurrent(entry) &&
+            entry.text === requestText
+          ) {
+            entry.translation = value;
+            entry.translationProvider = "base";
+            entry.translationError = "";
+            entry.translationStatus = "updating";
+            refreshEntryTranslationUI(entry);
+          }
+          return value;
+        })
+        .catch((error) => {
+          baseError = error;
+          return "";
+        });
+
+      let deepSeekError = null;
       try {
-        translated = await translateWithDeepSeekDirect(
+        const value = await translateWithDeepSeekDirect(
           entry.sourceLang,
           entry.targetLang,
           requestText,
         );
-        provider = "deepseek";
+        if (value) {
+          deepSeekShown = true;
+          translated = value;
+          provider = "deepseek";
+          if (isEntryCurrent(entry) && entry.text === requestText) {
+            entry.translation = value;
+            entry.translationProvider = "deepseek";
+            entry.translationError = "";
+            entry.translationStatus = "done";
+            refreshEntryTranslationUI(entry);
+          }
+        }
       } catch (error) {
-        const now = performance.now();
-        if (!state.lastPolishNoticeAt || now - state.lastPolishNoticeAt > 15000) {
-          state.lastPolishNoticeAt = now;
-          const raw = String(error?.message || "");
-          showToast(
-            /401|unauthorized|invalid|api key|余额|balance/i.test(raw)
-              ? "DeepSeek 直译失败（Key 或余额问题），已回退基础翻译。"
-              : "DeepSeek 直译失败，已回退基础翻译。",
-            { error: true, duration: 5200 },
-          );
+        deepSeekError = error;
+      }
+
+      if (!translated) {
+        translated = await basePromise;
+        provider = "base";
+        if (translated && deepSeekError) {
+          notifyDeepSeekFallback(deepSeekError);
+        }
+        if (!translated) {
+          throw deepSeekError || baseError || new Error("翻译失败");
         }
       }
-    }
-
-    if (!translated) {
+    } else {
       translated = await state.translationService.translate(requestText, entry.sourceLang);
       provider = "base";
     }
@@ -2390,7 +2428,7 @@ async function translateWithDeepSeekDirect(sourceLang, targetLang, source) {
       max_tokens: 600,
       stream: false,
     }),
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(8000),
   });
   const data = await response.json().catch(() => null);
   if (!response.ok) {
@@ -2401,6 +2439,20 @@ async function translateWithDeepSeekDirect(sourceLang, targetLang, source) {
     );
   }
   return cleanPolishResult(data?.choices?.[0]?.message?.content);
+}
+
+function notifyDeepSeekFallback(error) {
+  if (!state.live) return;
+  const now = performance.now();
+  if (state.lastPolishNoticeAt && now - state.lastPolishNoticeAt < 15000) return;
+  state.lastPolishNoticeAt = now;
+  const raw = String(error?.message || "");
+  showToast(
+    /401|unauthorized|invalid|api key|余额|balance/i.test(raw)
+      ? "DeepSeek 不可用（Key 或余额问题），当前使用基础翻译。"
+      : "DeepSeek 优化暂不可用，当前使用基础翻译。",
+    { duration: 4800 },
+  );
 }
 
 function scheduleEntryPolish(entry) {
