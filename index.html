@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#08090b" />
+    <meta name="color-scheme" content="dark" />
+    <meta
+      name="description"
+      content="NeckTalk 颈边实时字幕：用摄像头与麦克风实时识别中英文语音，把带发言人署名的字幕贴在说话人的脖子旁边。"
+    />
+    <meta property="og:title" content="NeckTalk · 颈边实时字幕" />
+    <meta
+      property="og:description"
+      content="实时中英文语音字幕，自动跟随说话人颈部，不遮脸、不串台。"
+    />
+    <meta property="og:type" content="website" />
+    <title>NeckTalk · 颈边实时字幕</title>
+    <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
+    <link rel="stylesheet" href="./assets/styles.css" />
+  </head>
+  <body>
+    <div class="app" id="app">
+      <div class="ambient" aria-hidden="true">
+        <div class="ambient-glow ambient-glow-a"></div>
+        <div class="ambient-glow ambient-glow-b"></div>
+        <div class="ambient-grid"></div>
+        <div class="ambient-word">NECKTALK</div>
+      </div>
+
+      <div class="video-shell" id="video-shell" aria-hidden="true">
+        <video id="camera" playsinline muted autoplay></video>
+        <div class="video-grade"></div>
+      </div>
+
+      <div class="stage" id="stage" aria-hidden="true"></div>
+
+      <header class="topbar" id="topbar">
+        <a class="brand" href="./" aria-label="NeckTalk 首页">
+          <span class="brand-mark">N</span>
+          <span class="brand-copy">
+            <strong>NECKTALK</strong>
+            <span>颈边实时字幕</span>
+          </span>
+        </a>
+
+        <div class="topbar-right">
+          <div class="live-chip" id="live-chip">
+            <span class="live-dot"></span>
+            <span id="live-text">待机</span>
+          </div>
+
+          <div class="lang-switch" role="group" aria-label="识别语言">
+            <span class="lang-label">识别语言</span>
+            <button type="button" class="lang-btn is-active" data-lang="zh-CN" aria-pressed="true">中文</button>
+            <button type="button" class="lang-btn" data-lang="en-US" aria-pressed="false">EN</button>
+          </div>
+
+          <button type="button" class="icon-btn" id="panel-btn" aria-label="打开字幕记录" aria-expanded="false" title="字幕记录">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 6h16M4 12h16M4 18h10" />
+            </svg>
+            <span class="icon-badge" id="panel-badge" hidden>0</span>
+          </button>
+
+          <button type="button" class="icon-btn is-active" id="mirror-btn" aria-label="镜像画面" aria-pressed="true" title="镜像画面">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3v18M8.5 6 4 12l4.5 6M15.5 6 20 12l-4.5 6" />
+            </svg>
+          </button>
+
+          <button type="button" class="icon-btn" id="fullscreen-btn" aria-label="全屏" title="全屏">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="hero" id="hero">
+        <section class="hero-copy">
+          <p class="eyebrow"><span class="eyebrow-dot"></span> REAL-TIME VOICE SUBTITLES</p>
+          <h1>让每句话，<br /><span class="accent-line">落在颈边。</span></h1>
+          <p class="lede">
+            打开摄像头，实时识别中英文语音。字幕会贴在说话人脖子旁，自动区分发言人，也不遮脸。
+          </p>
+
+          <div class="hero-actions">
+            <button type="button" class="start-btn" id="start-btn">
+              <span class="start-btn-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m22 8-6 4 6 4V8Z" />
+                  <rect x="2" y="6" width="14" height="12" rx="2.5" />
+                </svg>
+              </span>
+              <span class="start-btn-text">开启摄像头 · 开始字幕</span>
+              <span class="start-btn-spinner" aria-hidden="true"></span>
+            </button>
+            <p class="permission-note">
+              需要摄像头与麦克风权限 · 语音识别需联网<br />
+              推荐桌面版 Chrome / Edge · 右上角切换 <b>中文 / English</b>
+            </p>
+          </div>
+
+          <p class="setup-error" id="setup-error" role="alert" hidden></p>
+
+          <ul class="feature-chips" aria-label="功能">
+            <li><i class="chip-dot chip-dot-a"></i>实时转写</li>
+            <li><i class="chip-dot chip-dot-b"></i>发言人识别</li>
+            <li><i class="chip-dot chip-dot-c"></i>中 / EN</li>
+            <li><i class="chip-dot chip-dot-d"></i>画面本地处理</li>
+          </ul>
+        </section>
+
+        <section class="hero-visual" aria-hidden="true">
+          <div class="preview-glow"></div>
+          <div class="preview-card">
+            <div class="preview-bar">
+              <span class="preview-cam"><i></i> CAM 01</span>
+              <span class="preview-bar-meta">ZH · LIVE</span>
+            </div>
+            <div class="preview-stage">
+              <div class="preview-bg"></div>
+              <div class="figure figure-b">
+                <span class="figure-body"></span>
+                <span class="figure-neck"></span>
+                <span class="figure-head"></span>
+              </div>
+              <div class="figure figure-a">
+                <span class="figure-body"></span>
+                <span class="figure-neck"></span>
+                <span class="figure-head">
+                  <span class="figure-mesh"></span>
+                </span>
+                <div class="mini-subtitle">
+                  <span class="mini-name">发言人A</span>
+                  <p>字幕会跟在脖子旁边。</p>
+                  <i class="mini-caret"></i>
+                </div>
+              </div>
+              <span class="scanline"></span>
+              <span class="corner corner-tl"></span>
+              <span class="corner corner-tr"></span>
+              <span class="corner corner-bl"></span>
+              <span class="corner corner-br"></span>
+              <span class="preview-live"><i></i> TRACKING</span>
+              <span class="preview-count">2 SPEAKERS</span>
+            </div>
+            <div class="preview-foot">
+              <span>SPEAKER A · ACTIVE</span>
+              <span>不遮脸 · 自动跟随</span>
+            </div>
+          </div>
+          <div class="float-pill float-pill-a"><i></i> 发言人A 已锁定</div>
+          <div class="float-pill float-pill-b">字幕跟随颈部</div>
+        </section>
+      </main>
+
+      <div class="dock" id="dock" aria-hidden="true">
+        <div class="dock-listen">
+          <div class="eq" id="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="dock-copy">
+            <strong id="dock-title">正在聆听</strong>
+            <span id="dock-sub">中文识别 · 正在寻找发言人</span>
+          </div>
+        </div>
+        <div class="dock-actions">
+          <button type="button" class="dock-btn" id="dock-panel-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
+            记录
+          </button>
+          <button type="button" class="stop-btn" id="stop-btn">
+            <span class="stop-square"></span>
+            结束字幕
+          </button>
+        </div>
+      </div>
+
+      <div class="panel-scrim" id="panel-scrim" aria-hidden="true"></div>
+      <aside class="panel" id="panel" aria-hidden="true" aria-labelledby="panel-title">
+        <div class="panel-head">
+          <div>
+            <p class="panel-kicker">TRANSCRIPT</p>
+            <h2 id="panel-title">字幕记录</h2>
+          </div>
+          <button type="button" class="icon-btn" id="panel-close" aria-label="关闭字幕记录">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
+        </div>
+        <div class="panel-toolbar">
+          <button type="button" class="tool-btn" id="copy-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></svg>
+            复制
+          </button>
+          <button type="button" class="tool-btn" id="export-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16" /></svg>
+            导出 SRT
+          </button>
+          <button type="button" class="tool-btn tool-btn-quiet" id="clear-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13" /></svg>
+            清空
+          </button>
+        </div>
+        <div class="panel-body" id="panel-body">
+          <div class="panel-empty" id="panel-empty">
+            <span class="empty-mark">“</span>
+            <p>说话后，字幕会留在这里。</p>
+            <span>中英文会自动按识别语言转写</span>
+          </div>
+          <ol class="entry-list" id="entry-list"></ol>
+        </div>
+        <div class="panel-foot">
+          <span><i class="foot-dot"></i> 字幕仅保存在本页</span>
+          <span id="panel-count">0 条</span>
+        </div>
+      </aside>
+
+      <div class="loader" id="loader" hidden>
+        <div class="loader-mark">N</div>
+        <p class="loader-brand">NECKTALK</p>
+        <p class="loader-text" id="loader-text">正在打开摄像头…</p>
+        <div class="loader-track"><i id="loader-bar"></i></div>
+        <p class="loader-hint">画面只在本机分析</p>
+      </div>
+
+      <div class="toast" id="toast" role="status" aria-live="polite">
+        <span class="toast-dot"></span>
+        <span id="toast-text"></span>
+      </div>
+
+      <div class="hint-pill" id="hint-pill">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" /></svg>
+        <span>把说话的人放进画面，字幕会自动跟随颈部</span>
+        <button type="button" id="hint-close" aria-label="关闭提示">知道了</button>
+      </div>
+    </div>
+
+    <noscript>
+      <div class="no-script">NeckTalk 需要启用 JavaScript 才能使用。</div>
+    </noscript>
+
+    <script type="module" src="./assets/app.js"></script>
+  </body>
+</html>
