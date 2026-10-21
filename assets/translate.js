@@ -1,4 +1,5 @@
 const MYMEMORY_ENDPOINT = "https://api.mymemory.translated.net/get";
+const MOZHI_ENDPOINT = "https://mozhi.pussthecat.org/api/translate";
 const MAX_QUERY_LENGTH = 500;
 
 export const LANGUAGE_INFO = {
@@ -58,6 +59,7 @@ export class TranslationService {
     this.maxActive = 2;
     this.builtIn = new Map();
     this.builtInChecked = new Set();
+    this.mozhiCooldownUntil = 0;
   }
 
   translate(text, sourceLang) {
@@ -117,7 +119,48 @@ export class TranslationService {
         void error;
       }
     }
+
+    if (performance.now() >= this.mozhiCooldownUntil) {
+      try {
+        return await this.translateWithMozhi(text, pair);
+      } catch (error) {
+        void error;
+        this.mozhiCooldownUntil = performance.now() + 30000;
+      }
+    }
+
     return this.translateWithMyMemory(text, pair);
+  }
+
+  async translateWithMozhi(text, pair) {
+    const from = pair.sourceLang === "zh-CN" ? "zh" : "en";
+    const to = pair.targetLang === "zh-CN" ? "zh" : "en";
+    const params = new URLSearchParams({
+      engine: "deepl",
+      from,
+      to,
+      text,
+    });
+
+    const response = await fetch(`${MOZHI_ENDPOINT}?${params.toString()}`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(4500),
+    });
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        throw new TranslationError("翻译请求过于频繁", "rate-limit");
+      }
+      throw new TranslationError(`翻译服务错误 (${response.status})`, "http");
+    }
+
+    const data = await response.json();
+    const translated = String(data?.["translated-text"] || "").trim();
+    if (!translated) {
+      throw new TranslationError("翻译结果为空", "empty");
+    }
+    return decodeEntities(translated);
   }
 
   async getBuiltIn(pair) {
